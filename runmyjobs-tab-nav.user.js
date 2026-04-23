@@ -185,7 +185,7 @@
       return;
     }
     // Ctrl+W → Close current tab
-    if ((e.key === "w" || e.key === "W") && e.ctrlKey && !e.shiftKey) {
+    if ((e.key === "q" || e.key === "Q") && e.ctrlKey && !e.shiftKey) {
       e.preventDefault();
       e.stopImmediatePropagation();
       closeCurrentTab();
@@ -219,7 +219,7 @@
 
     document.addEventListener('keydown', handleKeyDown);
     console.log('[RunMyJobs] Edit shortcut (E key) active.');
-    console.log('[RunMyJobs] Save shortcuts (Ctrl+S / Ctrl+Shift+S) active.');
+    console.log('[RunMyJobs] Save shortcuts (Ctrl+S / Ctrl+E) active.');
   }
 
   function waitForElements() {
