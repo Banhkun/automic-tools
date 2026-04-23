@@ -136,7 +136,24 @@
     return false;
   }
 
+// ─── Close Current Tab ────────────────────────────────────────────────────
 
+  function closeCurrentTab() {
+    const allPanels = getAllTabBarPanels();
+    const activePanel = getActivePanel();
+    if (!activePanel) return;
+
+    // Find the selected tab header in the second tabHeaders (the interactive one with buttons)
+    const tabHeadersContainers = Array.from(activePanel.querySelectorAll('.tabHeaders'));
+    const mainTabHeaders = tabHeadersContainers.find(c => c.className === 'tabHeaders');
+    if (!mainTabHeaders) return;
+
+    const selectedTab = mainTabHeaders.querySelector('.tabHeader.selected');
+    if (!selectedTab) return;
+
+    const closeBtn = selectedTab.querySelector('button.IMAGE_AETHER_CLOSE, button[class*="IMAGE_AETHER_CLOSE"]');
+    if (closeBtn) closeBtn.click();
+  }
   // ─── Unified Key Handler ──────────────────────────────────────────────────
 
   function isTypingContext() {
@@ -167,7 +184,13 @@
       clickSave();
       return;
     }
-
+    // Ctrl+W → Close current tab
+    if ((e.key === "w" || e.key === "W") && e.ctrlKey && !e.shiftKey) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      closeCurrentTab();
+      return;
+    }
     // E key → Edit context menu shortcut
     if (
       (e.key === "e" || e.key === "E") &&
