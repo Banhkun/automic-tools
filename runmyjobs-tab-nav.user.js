@@ -180,8 +180,10 @@
   }
 
   function handleKeyDown(e) {
+    const key = e.key.toLowerCase();
+
     // Tab navigation
-    if (e.key === "Tab" && !e.ctrlKey && !e.altKey) {
+    if (key === "tab" && !e.ctrlKey && !e.altKey) {
       const allPanels = getAllTabBarPanels();
       if (allPanels.length === 0) return;
       e.preventDefault();
@@ -189,54 +191,51 @@
       return;
     }
 
-    // Ctrl+Shift+S → Save & Close
-    if ((e.key === "e" || e.key === "E") && e.ctrlKey) {
-      e.preventDefault(); // Always prevent browser capture shortcut
-      clickSaveAndClose();
-      return;
+    // Ctrl shortcuts
+    if (e.ctrlKey && !e.altKey) {
+      switch (key) {
+        case "e":
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          clickSaveAndClose();
+          return;
+        case "s":
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          clickSave();
+          return;
+        case "q":
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          closeCurrentTab();
+          return;
+      }
+      return; // don't fall through to plain key handlers
     }
 
-    // Ctrl+S → Save
-    if ((e.key === "s" || e.key === "S") && e.ctrlKey && !e.shiftKey) {
-      e.preventDefault(); // Always prevent browser save dialog
-      clickSave();
-      return;
-    }
-    // Ctrl+W → Close current tab
-    if ((e.key === "q" || e.key === "Q") && e.ctrlKey && !e.shiftKey) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      closeCurrentTab();
-      return;
-    }
-    // E key → Edit context menu shortcut
-    if (
-      (e.key === "e" || e.key === "E") &&
-      !e.ctrlKey &&
-      !e.altKey &&
-      !e.shiftKey
-    ) {
+    // Plain key shortcuts (no ctrl/alt/shift)
+    if (!e.ctrlKey && !e.altKey && !e.shiftKey) {
       if (isTypingContext()) return;
-      clickMenuItemByLabel("Edit...");
-      return;
-    }
 
-    // D key → Duplicate context menu shortcut
-    if (
-      (e.key === "d" || e.key === "D") &&
-      !e.ctrlKey &&
-      !e.altKey &&
-      !e.shiftKey
-    ) {
-      if (isTypingContext()) return;
-      clickMenuItemByLabel("Duplicate...");
-      return;
+      const contextMenuShortcuts = {
+        e: "Edit...",
+        d: "Duplicate...",
+        o: "⧉ Interact with Definition Object Tags",
+      };
+
+      if (contextMenuShortcuts[key]) {
+        clickMenuItemByLabel(contextMenuShortcuts[key]);
+      }
     }
   }
   // ─── HINT ─────────────────────────────────────────────────────────────────
   function addContextMenuHints() {
     function applyHints(menu) {
-      const hints = { "Edit...": "E", "Duplicate...": "D" };
+      const hints = {
+        "Edit...": "E",
+        "Duplicate...": "D",
+        "⧉ Interact with Definition Object Tags": "O",
+      };
       const items = menu.querySelectorAll('[data-testid="UIMenuItem"]');
       if (items.length === 0) return;
 
