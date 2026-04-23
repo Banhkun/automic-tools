@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         RunMyJobs: Tab & Panel Navigation + Edit Shortcut
 // @namespace    bosch-asportal
-// @version      1.1
-// @description  Tab/Shift+Tab keyboard navigation for UIReact-TabBar elements + E key shortcut for Edit in context menu
+// @version      1.2
+// @description  Tab/Shift+Tab keyboard navigation for UIReact-TabBar elements + E key shortcut for Edit in context menu + Ctrl+S to Save / Ctrl+Shift+S to Save & Close
 // @author       You
 // @match        https://runmyjobs-dev1.emea.bosch.com/redwood/ui*
 // @grant        none
@@ -105,6 +105,38 @@
     }
   }
 
+  // ─── Save / Save & Close Shortcuts ───────────────────────────────────────
+
+  function findButtonByText(text) {
+    const buttons = document.querySelectorAll('button, [role="button"]');
+    for (const btn of buttons) {
+      if (btn.textContent.trim() === text && !btn.disabled) {
+        return btn;
+      }
+    }
+    return null;
+  }
+
+  function clickSave() {
+    const btn = findButtonByText("Save");
+    if (btn) {
+      btn.click();
+      return true;
+    }
+    return false;
+  }
+
+  function clickSaveAndClose() {
+    const btn =
+      findButtonByText("Save and Close") || findButtonByText("Save & Close");
+    if (btn) {
+      btn.click();
+      return true;
+    }
+    return false;
+  }
+
+
   // ─── Unified Key Handler ──────────────────────────────────────────────────
 
   function isTypingContext() {
@@ -114,21 +146,40 @@
 
   function handleKeyDown(e) {
     // Tab navigation
-    if (e.key === 'Tab' && !e.ctrlKey && !e.altKey) {
+    if (e.key === "Tab" && !e.ctrlKey && !e.altKey) {
       const allPanels = getAllTabBarPanels();
       if (allPanels.length === 0) return;
-
       e.preventDefault();
-      navigate(e.shiftKey ? 'previous' : 'next');
+      navigate(e.shiftKey ? "previous" : "next");
+      return;
+    }
+
+    // Ctrl+Shift+S → Save & Close
+    if ((e.key === "e" || e.key === "E") && e.ctrlKey) {
+      e.preventDefault(); // Always prevent browser capture shortcut
+      clickSaveAndClose();
+      return;
+    }
+
+    // Ctrl+S → Save
+    if ((e.key === "s" || e.key === "S") && e.ctrlKey && !e.shiftKey) {
+      e.preventDefault(); // Always prevent browser save dialog
+      clickSave();
       return;
     }
 
     // E key → Edit context menu shortcut
-    if ((e.key === 'e' || e.key === 'E') && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+    if (
+      (e.key === "e" || e.key === "E") &&
+      !e.ctrlKey &&
+      !e.altKey &&
+      !e.shiftKey
+    ) {
       if (isTypingContext()) return;
       clickEditIfMenuVisible();
     }
   }
+
 
   // ─── Init ─────────────────────────────────────────────────────────────────
 
@@ -145,6 +196,7 @@
 
     document.addEventListener('keydown', handleKeyDown);
     console.log('[RunMyJobs] Edit shortcut (E key) active.');
+    console.log('[RunMyJobs] Save shortcuts (Ctrl+S / Ctrl+Shift+S) active.');
   }
 
   function waitForElements() {
