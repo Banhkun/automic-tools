@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         RunMyJobs: Tab & Panel Navigation
+// @name         RunMyJobs: Tab & Panel Navigation + Edit Shortcut
 // @namespace    bosch-asportal
-// @version      1.0
-// @description  Tab/Shift+Tab keyboard navigation for UIReact-TabBar elements in RunMyJobs Redwood UI
+// @version      1.1
+// @description  Tab/Shift+Tab keyboard navigation for UIReact-TabBar elements + E key shortcut for Edit in context menu
 // @author       You
 // @match        https://runmyjobs-dev1.emea.bosch.com/redwood/ui*
 // @grant        none
@@ -11,6 +11,8 @@
 
 (function() {
   'use strict';
+
+  // ─── Tab & Panel Navigation ───────────────────────────────────────────────
 
   function getAllTabBarPanels() {
     return Array.from(document.querySelectorAll('.UIReact-TabBar'));
@@ -87,30 +89,62 @@
     }
   }
 
+  // ─── Edit Context Menu Shortcut ───────────────────────────────────────────
+
+  function clickEditIfMenuVisible() {
+    const menu = document.querySelector('[data-testid="UIContextMenu_MainPage"]');
+    if (!menu) return;
+
+    const items = menu.querySelectorAll('[data-testid="UIMenuItem"]');
+    for (const item of items) {
+      const label = item.querySelector('.sc-dmyCSP');
+      if (label && label.textContent.trim() === 'Edit...') {
+        item.click();
+        return;
+      }
+    }
+  }
+
+  // ─── Unified Key Handler ──────────────────────────────────────────────────
+
+  function isTypingContext() {
+    const tag = document.activeElement.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable;
+  }
+
   function handleKeyDown(e) {
+    // Tab navigation
     if (e.key === 'Tab' && !e.ctrlKey && !e.altKey) {
       const allPanels = getAllTabBarPanels();
       if (allPanels.length === 0) return;
 
       e.preventDefault();
       navigate(e.shiftKey ? 'previous' : 'next');
-    }
-  }
-
-  function init() {
-    const allPanels = getAllTabBarPanels();
-    if (allPanels.length === 0) {
-      console.log('[RunMyJobs Tab Nav] No UIReact-TabBar elements found on this page.');
       return;
     }
 
-    const activePanel = getActivePanel();
-    if (!activePanel && allPanels.length > 0) {
-      setActivePanel(allPanels[0]);
+    // E key → Edit context menu shortcut
+    if ((e.key === 'e' || e.key === 'E') && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      if (isTypingContext()) return;
+      clickEditIfMenuVisible();
+    }
+  }
+
+  // ─── Init ─────────────────────────────────────────────────────────────────
+
+  function init() {
+    const allPanels = getAllTabBarPanels();
+
+    if (allPanels.length === 0) {
+      console.log('[RunMyJobs] No UIReact-TabBar elements found on this page.');
+    } else {
+      const activePanel = getActivePanel();
+      if (!activePanel) setActivePanel(allPanels[0]);
+      console.log('[RunMyJobs] Tab navigation initialized with ' + allPanels.length + ' panel(s).');
     }
 
     document.addEventListener('keydown', handleKeyDown);
-    console.log('[RunMyJobs Tab Nav] Initialized with ' + allPanels.length + ' panel(s).');
+    console.log('[RunMyJobs] Edit shortcut (E key) active.');
   }
 
   function waitForElements() {
@@ -134,7 +168,7 @@
     try {
       observer.observe(document.body, { childList: true, subtree: true });
     } catch (error) {
-      console.error('[RunMyJobs Tab Nav] Observer error:', error);
+      console.error('[RunMyJobs] Observer error:', error);
       const checkInterval = setInterval(() => {
         if (getAllTabBarPanels().length > 0) {
           clearInterval(checkInterval);
@@ -149,4 +183,5 @@
   } else {
     waitForElements();
   }
+
 })();
