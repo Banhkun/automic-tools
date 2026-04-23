@@ -90,20 +90,23 @@
   }
 
   // ─── Edit Context Menu Shortcut ───────────────────────────────────────────
-
-  function clickEditIfMenuVisible() {
-    const menu = document.querySelector('[data-testid="UIContextMenu_MainPage"]');
-    if (!menu) return;
+  function clickMenuItemByLabel(label) {
+    const menu = document.querySelector(
+      '[data-testid="UIContextMenu_MainPage"]',
+    );
+    if (!menu) return false;
 
     const items = menu.querySelectorAll('[data-testid="UIMenuItem"]');
     for (const item of items) {
-      const label = item.querySelector('.sc-dmyCSP');
-      if (label && label.textContent.trim() === 'Edit...') {
+      const el = item.querySelector(".sc-dmyCSP");
+      if (el && el.textContent.trim() === label) {
         item.click();
-        return;
+        return true;
       }
     }
+    return false;
   }
+
 
   // ─── Save / Save & Close Shortcuts ───────────────────────────────────────
 
@@ -199,7 +202,20 @@
       !e.shiftKey
     ) {
       if (isTypingContext()) return;
-      clickEditIfMenuVisible();
+      clickMenuItemByLabel("Edit...");
+      return;
+    }
+
+    // D key → Duplicate context menu shortcut
+    if (
+      (e.key === "d" || e.key === "D") &&
+      !e.ctrlKey &&
+      !e.altKey &&
+      !e.shiftKey
+    ) {
+      if (isTypingContext()) return;
+      clickMenuItemByLabel("Duplicate...");
+      return;
     }
   }
 
