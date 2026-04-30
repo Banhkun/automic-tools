@@ -16,12 +16,14 @@
 
   const CONTEXT_MENU_SHORTCUTS = {
     'e': 'Edit...',
+    'x': 'Edit as XML...',
     'd': 'Duplicate...',
     'o': '⧉ Interact with Definition Object Tags',
   };
 
   const CONTEXT_MENU_HINTS = {
     'Edit...': 'E',
+    'Edit as XML...': 'X',
     'Duplicate...': 'D',
     '⧉ Interact with Definition Object Tags': 'O',
   };
