@@ -5,6 +5,7 @@
 // @description  Tab/Shift+Tab navigation, context menu shortcuts, Ctrl+S/E/Q
 // @author       You
 // @match        https://runmyjobs-dev1.emea.bosch.com/redwood/ui*
+// @match        https://runmyjobs-test1.emea.bosch.com/redwood/ui*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
