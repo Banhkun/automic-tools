@@ -37,7 +37,7 @@
     const dialog = document.querySelector('#JobChainCallDialog');
     if (!dialog) return false;
     for (const btn of dialog.querySelectorAll('button')) {
-      if (btn.textContent.trim() === 'Edit Job') {
+      if (btn.textContent.trim() === 'Edit JobE') {
         btn.click();
         return true;
       }
