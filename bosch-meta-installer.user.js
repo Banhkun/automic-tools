@@ -8,7 +8,8 @@
 // @match        https://rb-wam.bosch.com/*
 // @match        https://apps-p-p1-outsystems.de.bosch.com/ASPortal/*
 // @match        https://runmyjobs-dev1.emea.bosch.com/redwood/ui*
-//
+// @match        https://runmyjobs-test1.emea.bosch.com/redwood/ui*
+
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
 //
