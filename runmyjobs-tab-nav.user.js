@@ -27,7 +27,47 @@
     'Duplicate...': 'D',
     '⧉ Interact with Definition Object Tags': 'O',
   };
+  // ─── Job Chain Dialog ─────────────────────────────────────────────────────
 
+  function isJobChainDialogOpen() {
+    return !!document.querySelector('#JobChainCallDialog');
+  }
+
+  function clickEditJob() {
+    const dialog = document.querySelector('#JobChainCallDialog');
+    if (!dialog) return false;
+    for (const btn of dialog.querySelectorAll('button')) {
+      if (btn.textContent.trim() === 'Edit Job') {
+        btn.click();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function applyJobChainDialogHints(dialog) {
+    for (const btn of dialog.querySelectorAll('button')) {
+      if (btn.dataset.hintDone) continue;
+      const label = btn.textContent.trim();
+      if (label !== 'Edit Job') continue;
+
+      btn.dataset.hintDone = 'true';
+      btn.style.cssText += 'display:inline-flex !important; align-items:center !important; gap:6px !important;';
+
+      const badge = document.createElement('span');
+      badge.textContent = 'E';
+      badge.style.cssText = `
+        padding: 1px 5px !important;
+        font-size: 11px !important;
+        font-weight: bold !important;
+        font-family: monospace !important;
+        color: white !important;
+        opacity: 0.8 !important;
+        pointer-events: none !important;
+      `;
+      btn.appendChild(badge);
+    }
+  }
   // ─── Tab & Panel Navigation ───────────────────────────────────────────────
 
   function getAllTabBarPanels() {
@@ -241,14 +281,17 @@
           if (node.nodeType !== 1) continue;
 
           // Context menu container added
-          const menu = node.dataset?.testid === 'UIContextMenu_MainPage'
-            ? node
-            : node.querySelector?.('[data-testid="UIContextMenu_MainPage"]');
+          const menu =
+            node.dataset?.testid === "UIContextMenu_MainPage"
+              ? node
+              : node.querySelector?.('[data-testid="UIContextMenu_MainPage"]');
 
           if (menu) {
             // Watch inside menu for items to render
             const inner = new MutationObserver(() => {
-              if (menu.querySelectorAll('[data-testid="UIMenuItem"]').length > 0) {
+              if (
+                menu.querySelectorAll('[data-testid="UIMenuItem"]').length > 0
+              ) {
                 inner.disconnect();
                 applyContextMenuHints(menu);
               }
@@ -258,9 +301,20 @@
           }
 
           // Save buttons added
-          if (node.matches?.('[data-testid="UIButton_Save"]') ||
-              node.querySelector?.('[data-testid="UIButton_Save"]')) {
+          if (
+            node.matches?.('[data-testid="UIButton_Save"]') ||
+            node.querySelector?.('[data-testid="UIButton_Save"]')
+          ) {
             addButtonBarHints();
+          }
+          // Job chain dialog added   ← new
+          const dialog =
+            node.id === "JobChainCallDialog"
+              ? node
+              : node.querySelector?.("#JobChainCallDialog");
+
+          if (dialog) {
+            applyJobChainDialogHints(dialog);
           }
         }
       }
