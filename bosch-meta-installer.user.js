@@ -7,7 +7,7 @@
 //
 // @match        https://rb-wam.bosch.com/*
 // @match        https://apps-p-p1-outsystems.de.bosch.com/ASPortal/*
-// @match        https://runmyjobs-*.emea.bosch.com/redwood/ui*
+// @include      https://runmyjobs-*.emea.bosch.com/redwood/ui*
 
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
