@@ -43,37 +43,33 @@
   }
 
   function clickEditJob() {
-    const dialog = document.querySelector('#JobChainCallDialog');
-    for (const btn of dialog.querySelectorAll('button')) {
-      if (btn.textContent.trim() === 'Edit JobE') {
-        btn.click();
-      }
-    }
-    return false;
+    document
+      .querySelector("#JobChainCallDialog button:has(.ULButton-Label)")
+      ?.click();
   }
 
   function applyJobChainDialogHints(dialog) {
-    for (const btn of dialog.querySelectorAll('button')) {
-      if (btn.dataset.hintDone) continue;
-      const label = btn.textContent.trim();
-      if (label !== 'Edit Job') continue;
+    const btn = dialog.querySelector("button:has(.ULButton-Label)");
+    if (!btn || btn.dataset.hintDone) return;
 
-      btn.dataset.hintDone = 'true';
-      btn.style.cssText += 'display:inline-flex !important; align-items:center !important; gap:6px !important;';
+    btn.dataset.hintDone = "true";
+    btn.style.cssText +=
+      "display:inline-flex !important; align-items:center !important; gap:6px !important;";
 
-      const badge = document.createElement('span');
-      badge.textContent = 'E';
-      badge.style.cssText = `
-        padding: 1px 5px !important;
-        font-size: 11px !important;
-        font-weight: bold !important;
-        font-family: monospace !important;
-        color: black !important;
-        opacity: 0.8 !important;
-        pointer-events: none !important;
-      `;
-      btn.appendChild(badge);
-    }
+    const badge = document.createElement("span");
+    badge.textContent = "E";
+    badge.style.cssText = `
+    padding: 1px 5px !important;
+    font-size: 11px !important;
+    font-weight: bold !important;
+    font-family: monospace !important;
+    color: black !important;
+    opacity: 0.8 !important;
+    pointer-events: none !important;
+    line-height: 1 !important;
+    align-self: center !important;
+  `;
+    btn.appendChild(badge);
   }
   // ─── Tab & Panel Navigation ───────────────────────────────────────────────
 
@@ -165,14 +161,12 @@
       const badge = document.createElement('span');
       badge.textContent = hint;
       badge.style.cssText = `
-        margin-left: auto !important;
-        padding: 1px 5px !important;
-        font-size: 11px !important;
-        font-weight: bold !important;
+        font-size: 10px !important;
+        opacity: 0.6 !important;
         font-family: monospace !important;
-        color: white !important;
-        opacity: 0.8 !important;
         pointer-events: none !important;
+        margin-top: 2px !important;
+        text-align: center !important;
       `;
       item.appendChild(badge);
     }
@@ -238,14 +232,14 @@
   // ─── Key Handler ──────────────────────────────────────────────────────────
 
   function isTypingContext() {
-    const tag = document.activeElement.tagName;
-    return tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable;
+  const el = document.activeElement;
+  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
   }
 
   function handleKeyDown(e) {
     const key = e.key.toLowerCase();
 
-    if (key === "tab" && !e.ctrlKey && !e.altKey) {
+    if (key === "tab" && !e.ctrlKey && !e.altKey && !isTypingContext()) {
       const allPanels = getAllTabBarPanels();
       if (allPanels.length === 0) return;
       // Let browser handle Tab natively inside Edit Job Definition dialog
