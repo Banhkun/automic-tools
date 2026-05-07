@@ -256,6 +256,14 @@
     }
 
     if (!e.ctrlKey && !e.altKey && !e.shiftKey && !isTypingContext()) {
+      // Job chain dialog shortcuts take priority
+      if (isJobChainDialogOpen()) {
+        if (key === "e") {
+          e.preventDefault();
+          clickEditJob();
+          return;
+        }
+      }
       const label = CONTEXT_MENU_SHORTCUTS[key];
       if (label) clickMenuItemByLabel(label);
     }
