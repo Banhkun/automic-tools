@@ -7,7 +7,7 @@
 //
 // @match        https://rb-wam.bosch.com/*
 // @match        https://apps-p-p1-outsystems.de.bosch.com/ASPortal/*
-// @match        https://runmyjobs-test1.emea.bosch.com/redwood/ui*
+// @include      https://runmyjobs-*.emea.bosch.com/redwood/ui*
 
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
@@ -42,7 +42,7 @@ const ROUTES = [
   },
   {
     // RunMyJobs tab navigation
-    match: () => href.includes('runmyjobs-dev1.emea.bosch.com/redwood/ui'),
+    match: () => href.includes('emea.bosch.com/redwood/ui'),
     src: `${BASE}/runmyjobs-tab-nav.user.js`,
   },
   {
