@@ -27,6 +27,15 @@
     'Duplicate...': 'D',
     '⧉ Interact with Definition Object Tags': 'O',
   };
+  // ─── Edit Job Definition Dialog ───────────────────────────────────────────
+
+  function isEditJobDialogOpen() {
+    // Matches the header text "Edit Job Definition - ..."
+    for (const el of document.querySelectorAll('[data-testid="UIText"]')) {
+      if (el.textContent.startsWith('Edit Job Definition')) return true;
+    }
+    return false;
+  }
   // ─── Job Chain Dialog ─────────────────────────────────────────────────────
 
   function isJobChainDialogOpen() {
@@ -35,11 +44,9 @@
 
   function clickEditJob() {
     const dialog = document.querySelector('#JobChainCallDialog');
-    if (!dialog) return false;
     for (const btn of dialog.querySelectorAll('button')) {
       if (btn.textContent.trim() === 'Edit JobE') {
         btn.click();
-        return true;
       }
     }
     return false;
@@ -61,7 +68,7 @@
         font-size: 11px !important;
         font-weight: bold !important;
         font-family: monospace !important;
-        color: white !important;
+        color: black !important;
         opacity: 0.8 !important;
         pointer-events: none !important;
       `;
@@ -238,11 +245,14 @@
   function handleKeyDown(e) {
     const key = e.key.toLowerCase();
 
-    if (key === 'tab' && !e.ctrlKey && !e.altKey) {
+    if (key === "tab" && !e.ctrlKey && !e.altKey) {
       const allPanels = getAllTabBarPanels();
       if (allPanels.length === 0) return;
+      // Let browser handle Tab natively inside Edit Job Definition dialog
+      if (isEditJobDialogOpen()) return;
+
       e.preventDefault();
-      navigate(e.shiftKey ? 'previous' : 'next');
+      navigate(e.shiftKey ? "previous" : "next");
       return;
     }
 
