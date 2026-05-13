@@ -192,26 +192,32 @@
   function addButtonBarHints() {
     function wrapWithHint(btn, hintText) {
       if (!btn || btn.dataset.hintAdded) return;
-      btn.dataset.hintAdded = 'true';
+      if (btn.closest(".JobChainEditor")) return;
 
-      const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'display:inline-flex; flex-direction:column; align-items:center;';
-      btn.parentNode.insertBefore(wrapper, btn);
-      wrapper.appendChild(btn);
+      // Don't touch btn's position in the DOM at all.
+      // Just insert a hint element right after it.
+      const parent = btn.parentNode;
+      if (!parent || !parent.contains(btn)) return;
 
-      const hint = document.createElement('span');
-      hint.textContent = hintText;
-      hint.style.cssText = `
-        font-size: 10px !important;
-        opacity: 0.6 !important;
-        font-family: monospace !important;
-        pointer-events: none !important;
-        margin-top: 2px !important;
-        text-align: center !important;
-      `;
-      wrapper.appendChild(hint);
+      btn.dataset.hintAdded = "true";
+
+      try {
+        const hint = document.createElement("span");
+        hint.textContent = hintText;
+        hint.dataset.rmjHint = "true";
+        hint.style.cssText = `
+      display: block !important;
+      font-size: 10px !important;
+      opacity: 0.6 !important;
+      font-family: monospace !important;
+      pointer-events: none !important;
+      text-align: center !important;
+    `;
+        btn.insertAdjacentElement("afterend", hint);
+      } catch {
+        btn.dataset.hintAdded = "";
+      }
     }
-
     wrapWithHint(document.querySelector('[data-testid="UIButton_Save"]'), 'Ctrl+S');
     wrapWithHint(document.querySelector('[data-testid="UIButton_SaveClose"]'), 'Ctrl+E');
   }
