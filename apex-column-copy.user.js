@@ -3,7 +3,7 @@
 // @namespace    bosch-asportal
 // @version      1.0
 // @description  Adds copy buttons to Interactive Grid and Interactive Report column headers in Oracle APEX
-// @author       You
+// @author       Minh Dinh
 // @match        https://rb-wam.bosch.com/*
 // @match        https://apps-p-p1-outsystems.de.bosch.com/*
 // @grant        none
