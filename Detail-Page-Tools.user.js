@@ -3,7 +3,7 @@
 // @namespace    bosch-asportal
 // @version      2.3
 // @description  Hamburger tools + direct AWI links + TEMP_DEACTIVATE + Auto Expandable Description
-// @author       You
+// @author       Minh Dinh
 // @match        https://apps-p-p1-outsystems.de.bosch.com/ASPortal/*
 // @grant        none
 // @run-at       document-idle
