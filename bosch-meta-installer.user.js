@@ -3,7 +3,7 @@
 // @namespace    bosch-asportal
 // @version      2.1
 // @description  Loads each Bosch AS-Portal tool only on its matching page. Caches scripts locally so tools work even when GitHub or the network is down.
-// @author       You
+// @author       Minh Dinh
 //
 // @match        https://rb-wam.bosch.com/*
 // @match        https://apps-p-p1-outsystems.de.bosch.com/ASPortal/*
