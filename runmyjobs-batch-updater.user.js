@@ -9,6 +9,16 @@
  *   - Save & Close automation after setting the value
  *   - batch loop with Stop button + counter
  */
+// ==UserScript==
+// @name         RunMyJobs: Batch ABAP_VARIANT_NAME updater
+// @namespace    bosch-asportal
+// @version      1.3
+// @description  Batch ABAP_VARIANT_NAME updater using UI control
+// @author       Minh Dinh
+// @include      https://runmyjobs-*.emea.bosch.com/redwood/ui*
+// @grant        none
+// @run-at       document-start
+// ==/UserScript==
 
 (function () {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
