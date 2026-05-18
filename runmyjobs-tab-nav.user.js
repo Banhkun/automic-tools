@@ -4,6 +4,7 @@
 // @version      1.3
 // @description  Tab/Shift+Tab navigation, context menu shortcuts, Ctrl+S/E/Q
 // @author       Minh Dinh
+// @match        https://runmyjobs-dev1.emea.bosch.com/redwood/ui*
 // @include      https://runmyjobs-*.emea.bosch.com/redwood/ui*
 // @grant        none
 // @run-at       document-start
