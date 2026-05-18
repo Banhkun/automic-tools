@@ -223,7 +223,7 @@
     );
     paramsNav.click();
     log("  → Parameters clicked");
-    await sleep(1500);
+    await sleep(500);
 
     /* STEP 11 — Find ABAP_VARIANT_NAME row (exact v4 logic) */
     const variantRow = await waitFor(() => findVariantRow(), 12000);
