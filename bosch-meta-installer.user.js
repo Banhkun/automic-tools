@@ -12,6 +12,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_addElement
 // @connect      raw.githubusercontent.com
 //
 // @updateURL    https://raw.githubusercontent.com/Banhkun/automic-tools/main/bosch-meta-installer.user.js
