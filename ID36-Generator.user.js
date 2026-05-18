@@ -2,7 +2,7 @@
 // @name         APEX: ID36 Generator
 // @namespace    bosch-asportal
 // @version      1.1
-// @description  Generates and copies multiple ID36 values from APEX by replaying the backend request
+// @description  Generates and copies multiple values from APEX by replaying the backend request
 // @author       Minh Dinh
 // @match        https://rb-wam.bosch.com/rb-aeinfoapp/ords/f?p=100:3035*
 // @grant        none
