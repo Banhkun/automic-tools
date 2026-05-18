@@ -9,16 +9,7 @@
  *   - Save & Close automation after setting the value
  *   - batch loop with Stop button + counter
  */
-// ==UserScript==
-// @name         RunMyJobs: Batch ABAP_VARIANT_NAME updater
-// @namespace    bosch-asportal
-// @version      1.3
-// @description  Batch ABAP_VARIANT_NAME updater using UI control
-// @author       Minh Dinh
-// @include      https://runmyjobs-*.emea.bosch.com/redwood/ui*
-// @grant        none
-// @run-at       document-start
-// ==/UserScript==
+
 (function () {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -223,7 +214,7 @@
     );
     paramsNav.click();
     log("  → Parameters clicked");
-    await sleep(500);
+    await sleep(1500);
 
     /* STEP 11 — Find ABAP_VARIANT_NAME row (exact v4 logic) */
     const variantRow = await waitFor(() => findVariantRow(), 12000);
@@ -505,6 +496,14 @@
     });
   }
 
-  buildUI();
-  console.log("[UC4 Bot v8] Ready. Call uc4Debug() or uc4DebugParams() in console anytime.");
+  function init() {
+    buildUI();
+    console.log("[UC4 Bot v8] Ready. Call uc4Debug() or uc4DebugParams() in console anytime.");
+  }
+
+  if (document.body) {
+    init();
+  } else {
+    document.addEventListener("DOMContentLoaded", init);
+  }
 })();
