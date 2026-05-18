@@ -501,9 +501,12 @@
     console.log("[UC4 Bot v8] Ready. Call uc4Debug() or uc4DebugParams() in console anytime.");
   }
 
-  if (document.body) {
-    init();
-  } else {
-    document.addEventListener("DOMContentLoaded", init);
+  function waitForBody(cb) {
+    if (document.body) { cb(); return; }
+    const iv = setInterval(() => {
+      if (document.body) { clearInterval(iv); cb(); }
+    }, 50);
   }
+
+  waitForBody(init);
 })();
