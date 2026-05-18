@@ -540,13 +540,57 @@
     const COL_NAMES = ["Status", "Comment", "CID"];
 
     function parseRawPaste(raw) {
-      // Split on newlines, then on tabs — preserves empty cells
-      const rows = raw.split(/\r?\n/).map((r) => r.split("\t").map((c) => c.trim()));
-      // Drop trailing completely-blank rows (Excel always adds a trailing \n)
-      while (rows.length && rows[rows.length - 1].every((c) => c === "")) rows.pop();
+      // Excel wraps cells containing newlines in double-quotes (RFC 4180-style).
+      // We must parse tab-delimited data respecting quoted multi-line cells,
+      // rather than naively splitting on \n.
+      const rows = [];
+      let i = 0;
+      raw = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+      while (i < raw.length) {
+        const row = [];
+        // Parse one row (terminated by \n outside a quoted cell, or EOF)
+        while (i < raw.length && raw[i] !== "\n") {
+          if (raw[i] === '"') {
+            // Quoted cell: consume until closing quote (double-quote = escaped quote)
+            i++; // skip opening quote
+            let cell = "";
+            while (i < raw.length) {
+              if (raw[i] === '"') {
+                if (raw[i + 1] === '"') {
+                  cell += '"';
+                  i += 2;
+                } // escaped quote
+                else {
+                  i++;
+                  break;
+                } // closing quote
+              } else {
+                cell += raw[i++];
+              }
+            }
+            row.push(cell.trim());
+          } else {
+            // Unquoted cell: consume until tab or newline
+            let cell = "";
+            while (i < raw.length && raw[i] !== "\t" && raw[i] !== "\n") {
+              cell += raw[i++];
+            }
+            row.push(cell.trim());
+          }
+          // Consume the tab separator between cells
+          if (i < raw.length && raw[i] === "\t") i++;
+        }
+        // Consume the row-terminating newline
+        if (i < raw.length && raw[i] === "\n") i++;
+        if (row.length) rows.push(row);
+      }
+
+      // Drop trailing completely-blank rows (Excel always appends a trailing \n)
+      while (rows.length && rows[rows.length - 1].every((c) => c === ""))
+        rows.pop();
       return rows;
     }
-
     function looksLikeCid(v) {
       return /^[0-9A-Fa-f]{16,}$/.test(v);
     }
