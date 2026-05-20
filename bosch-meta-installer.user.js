@@ -35,10 +35,6 @@ const ROUTES = [
     src: `${BASE}/Detail-Page-Tools.user.js`,
   },
     {
-    match: () => href.includes('emea.bosch.com/redwood/ui'),
-    src: `${BASE}/runmyjobs-batch-updater.user.js`,
-  },
-    {
     match: () => href.includes('rb-wam.bosch.com') && href.includes('f?p=100:44'),
     src: `${BASE}/Mal-column-filler.user.js`,
   },
