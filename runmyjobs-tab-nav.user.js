@@ -225,15 +225,27 @@
   // ─── Close Tab ────────────────────────────────────────────────────────────
 
   function closeCurrentTab() {
-    const activePanel = getActivePanel();
-    if (!activePanel) return;
-    const mainTabHeaders = Array.from(activePanel.querySelectorAll('.tabHeaders'))
-      .find(c => c.className === 'tabHeaders');
-    if (!mainTabHeaders) return;
-    const closeBtn = mainTabHeaders
-      .querySelector('.tabHeader.selected button[class*="IMAGE_AETHER_CLOSE"]');
-    closeBtn?.click();
+  const activePanel = getActivePanel();
+  if (!activePanel) return;
+
+  const tabs = getTabsInPanel(activePanel);
+  const currentIndex = getSelectedTabIndex(activePanel);
+  if (currentIndex === -1) return;
+
+  // Select left neighbor first, fall back to right
+  const targetIndex = currentIndex > 0 ? currentIndex - 1 : currentIndex + 1;
+  if (targetIndex >= 0 && targetIndex < tabs.length) {
+    selectTab(activePanel, targetIndex);
   }
+
+  // Now close the original tab
+  const mainTabHeaders = Array.from(activePanel.querySelectorAll('.tabHeaders'))
+    .find(c => c.className === 'tabHeaders');
+  if (!mainTabHeaders) return;
+  const closeBtn = mainTabHeaders
+    .querySelector('.tabHeader:nth-child(' + (currentIndex + 1) + ') button[class*="IMAGE_AETHER_CLOSE"]');
+  closeBtn?.click();
+}
 
   // ─── Key Handler ──────────────────────────────────────────────────────────
 
