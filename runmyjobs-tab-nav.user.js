@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         RunMyJobs: Tab & Panel Navigation + Shortcuts
 // @namespace    bosch-asportal
-// @version      1.3
-// @description  Tab/Shift+Tab navigation, context menu shortcuts, Ctrl+S/E/Q
+// @version      1.4
+// @description  Tab/Shift+Tab navigation, context menu shortcuts, Ctrl+S/E/Q, stdout copy button
 // @author       Minh Dinh
 // @include      https://runmyjobs-*.emea.bosch.com/redwood/ui*
 // @grant        none
@@ -27,15 +27,16 @@
     'Duplicate...': 'D',
     '⧉ Interact with Definition Object Tags': 'O',
   };
+
   // ─── Edit Job Definition Dialog ───────────────────────────────────────────
 
   function isEditJobDialogOpen() {
-    // Matches the header text "Edit Job Definition - ..."
     for (const el of document.querySelectorAll('[data-testid="UIText"]')) {
       if (el.textContent.startsWith('Edit Job Definition')) return true;
     }
     return false;
   }
+
   // ─── Job Chain Dialog ─────────────────────────────────────────────────────
 
   function isJobChainDialogOpen() {
@@ -71,6 +72,7 @@
   `;
     btn.appendChild(badge);
   }
+
   // ─── Tab & Panel Navigation ───────────────────────────────────────────────
 
   function getAllTabBarPanels() {
@@ -194,8 +196,6 @@
       if (!btn || btn.dataset.hintAdded) return;
       if (btn.closest(".JobChainEditor")) return;
 
-      // Don't touch btn's position in the DOM at all.
-      // Just insert a hint element right after it.
       const parent = btn.parentNode;
       if (!parent || !parent.contains(btn)) return;
 
@@ -225,33 +225,99 @@
   // ─── Close Tab ────────────────────────────────────────────────────────────
 
   function closeCurrentTab() {
-  const activePanel = getActivePanel();
-  if (!activePanel) return;
+    const activePanel = getActivePanel();
+    if (!activePanel) return;
 
-  const tabs = getTabsInPanel(activePanel);
-  const currentIndex = getSelectedTabIndex(activePanel);
-  if (currentIndex === -1) return;
+    const tabs = getTabsInPanel(activePanel);
+    const currentIndex = getSelectedTabIndex(activePanel);
+    if (currentIndex === -1) return;
 
-  // Select left neighbor first, fall back to right
-  const targetIndex = currentIndex > 0 ? currentIndex - 1 : currentIndex + 1;
-  if (targetIndex >= 0 && targetIndex < tabs.length) {
-    selectTab(activePanel, targetIndex);
+    const targetIndex = currentIndex > 0 ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex >= 0 && targetIndex < tabs.length) {
+      selectTab(activePanel, targetIndex);
+    }
+
+    const mainTabHeaders = Array.from(activePanel.querySelectorAll('.tabHeaders'))
+      .find(c => c.className === 'tabHeaders');
+    if (!mainTabHeaders) return;
+    const closeBtn = mainTabHeaders
+      .querySelector('.tabHeader:nth-child(' + (currentIndex + 1) + ') button[class*="IMAGE_AETHER_CLOSE"]');
+    closeBtn?.click();
   }
 
-  // Now close the original tab
-  const mainTabHeaders = Array.from(activePanel.querySelectorAll('.tabHeaders'))
-    .find(c => c.className === 'tabHeaders');
-  if (!mainTabHeaders) return;
-  const closeBtn = mainTabHeaders
-    .querySelector('.tabHeader:nth-child(' + (currentIndex + 1) + ') button[class*="IMAGE_AETHER_CLOSE"]');
-  closeBtn?.click();
-}
+  // ─── Stdout Copy Button ───────────────────────────────────────────────────
+
+  const COPY_MARKER = '=== COPY FROM BELOW THIS LINE ===';
+  const COPY_BTN_CLASS = 'rmj-copy-btn';
+
+  function getStdoutPre(container) {
+    return container?.querySelector('pre.TextViewerContent');
+  }
+
+  function injectCopyButton(tabContainer) {
+    if (!tabContainer) return;
+    const pre = getStdoutPre(tabContainer);
+    if (!pre) return;
+    if (tabContainer.querySelector('.' + COPY_BTN_CLASS)) return;
+
+    // Find the toolbar row (auto-refresher bar at the top of the log view)
+    const toolbar = tabContainer.querySelector(
+      '.ULPanel.ItemsContainer.RWItem.RWItemBreak.RWHorizontal'
+    );
+    if (!toolbar) return;
+
+    const btn = document.createElement('button');
+    btn.className = 'ULButton RWItem ButtonBarNormalButton ' + COPY_BTN_CLASS;
+    btn.type = 'button';
+    btn.style.cssText = 'margin-left: 8px !important;';
+    btn.innerHTML = '<span class="ULButton-Label">📋 Copy Output</span>';
+
+    btn.addEventListener('click', () => {
+      // Read text at click-time so we always get the latest content
+      const raw = pre.textContent;
+      const markerIdx = raw.indexOf(COPY_MARKER);
+      const textToCopy = markerIdx !== -1
+        ? raw.slice(markerIdx + COPY_MARKER.length).replace(/^\n/, '')
+        : raw;
+
+      const label = btn.querySelector('.ULButton-Label');
+      const original = label.textContent;
+
+      const done = (ok) => {
+        label.textContent = ok ? '✅ Copied!' : '❌ Failed';
+        setTimeout(() => { label.textContent = original; }, 1500);
+      };
+
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(textToCopy).then(() => done(true)).catch(() => done(false));
+      } else {
+        // Fallback: textarea execCommand (preserves \t)
+        const ta = document.createElement('textarea');
+        ta.value = textToCopy;
+        ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try { document.execCommand('copy'); done(true); } catch { done(false); }
+        document.body.removeChild(ta);
+      }
+    });
+
+    toolbar.appendChild(btn);
+  }
+
+  function tryInjectCopyButtons() {
+    // Inject into all currently visible (non-hidden) tab containers that have a pre
+    document.querySelectorAll('.UIReact-TabBar .tabContainer:not(.hide)').forEach(tc => {
+      if (getStdoutPre(tc)) injectCopyButton(tc);
+    });
+  }
 
   // ─── Key Handler ──────────────────────────────────────────────────────────
 
   function isTypingContext() {
-  const el = document.activeElement;
-  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
+    const el = document.activeElement;
+    return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
   }
 
   function handleKeyDown(e) {
@@ -260,7 +326,6 @@
     if (key === "tab" && !e.ctrlKey && !e.altKey && !isTypingContext()) {
       const allPanels = getAllTabBarPanels();
       if (allPanels.length === 0) return;
-      // Let browser handle Tab natively inside Edit Job Definition dialog
       if (isEditJobDialogOpen()) return;
 
       e.preventDefault();
@@ -278,7 +343,6 @@
     }
 
     if (!e.ctrlKey && !e.altKey && !e.shiftKey && !isTypingContext()) {
-      // Job chain dialog shortcuts take priority
       if (isJobChainDialogOpen()) {
         if (key === "e") {
           e.preventDefault();
@@ -306,52 +370,78 @@
 
     // Single observer for all dynamic UI
     const observer = new MutationObserver((mutations) => {
+      let mayHaveNewLog = false;
+
       for (const { addedNodes } of mutations) {
         for (const node of addedNodes) {
           if (node.nodeType !== 1) continue;
 
-          // Context menu container added
+          // Context menu
           const menu =
             node.dataset?.testid === "UIContextMenu_MainPage"
               ? node
               : node.querySelector?.('[data-testid="UIContextMenu_MainPage"]');
 
           if (menu) {
-            // Watch inside menu for items to render
             const inner = new MutationObserver(() => {
-              if (
-                menu.querySelectorAll('[data-testid="UIMenuItem"]').length > 0
-              ) {
+              if (menu.querySelectorAll('[data-testid="UIMenuItem"]').length > 0) {
                 inner.disconnect();
                 applyContextMenuHints(menu);
               }
             });
             inner.observe(menu, { childList: true, subtree: true });
-            applyContextMenuHints(menu); // try immediately too
+            applyContextMenuHints(menu);
           }
 
-          // Save buttons added
+          // Save buttons
           if (
             node.matches?.('[data-testid="UIButton_Save"]') ||
             node.querySelector?.('[data-testid="UIButton_Save"]')
           ) {
             addButtonBarHints();
           }
-          // Job chain dialog added   ← new
+
+          // Job chain dialog
           const dialog =
             node.id === "JobChainCallDialog"
               ? node
               : node.querySelector?.("#JobChainCallDialog");
+          if (dialog) applyJobChainDialogHints(dialog);
 
-          if (dialog) {
-            applyJobChainDialogHints(dialog);
+          // Detect new stdout pre elements or tab visibility changes
+          if (
+            node.matches?.('pre.TextViewerContent') ||
+            node.querySelector?.('pre.TextViewerContent') ||
+            node.classList?.contains('tabContainer') ||
+            node.querySelector?.('.tabContainer')
+          ) {
+            mayHaveNewLog = true;
           }
         }
       }
+
+      // Also check for attribute mutations (hide class toggled on tabContainer)
+      for (const m of mutations) {
+        if (m.type === 'attributes' && m.attributeName === 'class') {
+          const el = m.target;
+          if (el.classList?.contains('tabContainer') && !el.classList.contains('hide')) {
+            mayHaveNewLog = true;
+          }
+        }
+      }
+
+      if (mayHaveNewLog) tryInjectCopyButtons();
     });
 
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+
     addButtonBarHints();
+    tryInjectCopyButtons();
 
     console.log('[RunMyJobs] Shortcuts active: E/D/O (context menu), Ctrl+S, Ctrl+E, Ctrl+Q.');
   }
