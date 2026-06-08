@@ -4,7 +4,7 @@
 // @version      1.4
 // @description  Tab/Shift+Tab navigation, context menu shortcuts, Ctrl+S/E/Q, stdout copy button
 // @author       Minh Dinh
-// @include      https://runmyjobs-*.emea.bosch.com/redwood/ui*
+// @include      https://runmyjobs-*.emea.bosch.com/redwood/*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
