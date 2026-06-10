@@ -15,19 +15,19 @@
   // ─── Constants ────────────────────────────────────────────────────────────
 
   const CONTEXT_MENU_SHORTCUTS = {
-    'r': 'Run...',
-    'm': 'Monitor related jobs',
+    'x': 'Run...',
+    'r': 'Monitor related jobs',
     'e': 'Edit...',
-    'x': 'Edit as XML...',
+    's': 'Edit as XML...',
     'd': 'Duplicate...',
     'o': '⧉ Interact with Definition Object Tags',
   };
 
   const CONTEXT_MENU_HINTS = {
-    'Monitor related jobs': 'M',
-    'Run...': 'R',
+    'Monitor related jobs': 'R',
+    'Run...': 'X',
     'Edit...': 'E',
-    'Edit as XML...': 'X',
+    'Edit as XML...': 'S',
     'Duplicate...': 'D',
     '⧉ Interact with Definition Object Tags': 'O',
   };
