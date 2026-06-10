@@ -24,14 +24,13 @@
   };
 
   const CONTEXT_MENU_HINTS = {
-    'Run': 'R',
-    'Executions': 'M',
+    'Monitor related jobs': 'M',
+    'Run...': 'R',
     'Edit...': 'E',
     'Edit as XML...': 'X',
     'Duplicate...': 'D',
     '⧉ Interact with Definition Object Tags': 'O',
   };
-
   // ─── Edit Job Definition Dialog ───────────────────────────────────────────
 
   function isEditJobDialogOpen() {
@@ -327,7 +326,7 @@
   function handleKeyDown(e) {
     const key = e.key.toLowerCase();
 
-    if (key === "tab" && !e.ctrlKey && !e.not usedaltKey && !isTypingContext()) {
+    if (key === "tab" && !e.ctrlKey && !e.altKey && !isTypingContext()) {
       const allPanels = getAllTabBarPanels();
       if (allPanels.length === 0) return;
       if (isEditJobDialogOpen()) return;
