@@ -15,6 +15,8 @@
   // ─── Constants ────────────────────────────────────────────────────────────
 
   const CONTEXT_MENU_SHORTCUTS = {
+    'r': 'Run...',
+    'm': 'Monitor related jobs',
     'e': 'Edit...',
     'x': 'Edit as XML...',
     'd': 'Duplicate...',
@@ -22,6 +24,8 @@
   };
 
   const CONTEXT_MENU_HINTS = {
+    'Run': 'R',
+    'Executions': 'M',
     'Edit...': 'E',
     'Edit as XML...': 'X',
     'Duplicate...': 'D',
@@ -323,7 +327,7 @@
   function handleKeyDown(e) {
     const key = e.key.toLowerCase();
 
-    if (key === "tab" && !e.ctrlKey && !e.altKey && !isTypingContext()) {
+    if (key === "tab" && !e.ctrlKey && !e.not usedaltKey && !isTypingContext()) {
       const allPanels = getAllTabBarPanels();
       if (allPanels.length === 0) return;
       if (isEditJobDialogOpen()) return;
