@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AS-Portal: Swap Hierarchy Type ↔ Appointment Date + Expand List
 // @namespace    bosch-asportal
-// @version      1.3
+// @version      1.5
 // @description  Swaps "Hierarchy Type" and "Appointment Date" columns; expands request list to fill viewport
 // @author       You
 // @match        https://apps-p-p1-outsystems.de.bosch.com/ASPortal/Welcome*
@@ -12,12 +12,11 @@
 (function () {
     'use strict';
 
-    // ── Column swap config ────────────────────────────────────────────────────
     const COL_A = 'Hierarchy Type';
     const COL_B = 'Appointment Date';
     let isSwapping = false;
 
-    // ── Inject persistent CSS overrides (no GM_addStyle needed) ──────────────
+    // ── CSS injection ─────────────────────────────────────────────────────────
     function injectCSS(css) {
         const style = document.createElement('style');
         style.textContent = css;
@@ -39,7 +38,7 @@
         }
     `);
 
-    // ── Expand the list container height ─────────────────────────────────────
+    // ── Height expansion ──────────────────────────────────────────────────────
     function expandListContainer() {
         const containers = document.querySelectorAll('[id$="-VRequestList_HasData"]');
         containers.forEach(el => {
@@ -47,27 +46,37 @@
             const topOffset = rect.top + window.scrollY;
             const BOTTOM_PADDING = 24;
             const newHeight = `calc(100vh - ${Math.round(topOffset)}px - ${BOTTOM_PADDING}px)`;
-
-            if (el.style.height !== newHeight || el.style.overflow !== 'auto') {
-                el.style.setProperty('height', newHeight, 'important');
-                el.style.setProperty('overflow', 'auto', 'important');
-                el.style.setProperty('width', '100%', 'important');
-            }
+            el.style.setProperty('height', newHeight, 'important');
+            el.style.setProperty('overflow', 'auto', 'important');
+            el.style.setProperty('width', '100%', 'important');
         });
     }
 
-    // ── Column swap helpers ───────────────────────────────────────────────────
-    function getTable() {
-        return document.querySelector('table[role="grid"]');
+    // ── Header text (text nodes only, ignoring sort-icon child divs) ──────────
+    function headerText(th) {
+        let text = '';
+        th.childNodes.forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE) text += node.textContent;
+        });
+        return text.trim().replace(/\s+/g, ' ');
     }
 
-    function getColumnIndexes() {
-        const table = getTable();
-        if (!table || !table.tHead) return null;
+    // ── Check if the table is fully ready to swap ─────────────────────────────
+    // "Ready" means: thead exists, has at least one row, and both target headers
+    // are present AND the table has at least one tbody row (i.e. data loaded).
+    function getTableIfReady() {
+        const table = document.querySelector('table[role="grid"]');
+        if (!table || !table.tHead || !table.tHead.rows.length) return null;
+        if (!table.tBodies.length || !table.tBodies[0].rows.length) return null;
+        return table;
+    }
+
+    function getColumnIndexes(table) {
         const headers = Array.from(table.tHead.rows[0].cells);
-        const iA = headers.findIndex(th => th.textContent.trim() === COL_A);
-        const iB = headers.findIndex(th => th.textContent.trim() === COL_B);
-        return (iA > -1 && iB > -1 && iA !== iB) ? { iA, iB } : null;
+        const iA = headers.findIndex(th => headerText(th) === COL_A);
+        const iB = headers.findIndex(th => headerText(th) === COL_B);
+        if (iA === -1 || iB === -1 || iA === iB) return null;
+        return { iA, iB };
     }
 
     function swapCells(row, i1, i2) {
@@ -82,55 +91,83 @@
         }
     }
 
+    // ── Core swap — returns true only if it actually ran ──────────────────────
     function performSwap() {
         if (isSwapping) return false;
+
+        const table = getTableIfReady();
+        if (!table) return false;
+
+        // Skip if already swapped (guard attribute on thead row)
+        if (table.tHead.rows[0].dataset.asSwapped === '1') return true;
+
+        const idx = getColumnIndexes(table);
+        if (!idx) return false;
+
         isSwapping = true;
-        const idx = getColumnIndexes();
-        if (!idx) { isSwapping = false; return false; }
-        const table = getTable();
-        if (!table) { isSwapping = false; return false; }
         swapCells(table.tHead.rows[0], idx.iA, idx.iB);
         table.querySelectorAll('tbody tr').forEach(row => swapCells(row, idx.iA, idx.iB));
-        console.log('[AS-Portal] Columns swapped');
+
+        // Mark as swapped so MutationObserver re-triggers don't double-swap
+        table.tHead.rows[0].dataset.asSwapped = '1';
+
+        console.log(`[AS-Portal] Columns swapped: [${idx.iA}] ↔ [${idx.iB}]`);
         isSwapping = false;
         return true;
     }
 
-    // ── Combined: swap + expand ───────────────────────────────────────────────
     function applyAll() {
         performSwap();
         expandListContainer();
     }
 
-    function tryApplyNow(maxRetries = 15, delay = 400) {
+    // ── Retry loop: keeps going until swap succeeds or max attempts hit ───────
+    // Longer delay + more retries to survive slow first-load renders
+    function tryApplyNow(maxRetries = 30, delay = 500) {
         let attempts = 0;
         const interval = setInterval(() => {
-            const swapped = performSwap();
+            attempts++;
+            const done = performSwap();
             expandListContainer();
-            if (swapped || ++attempts >= maxRetries) clearInterval(interval);
+            if (done || attempts >= maxRetries) {
+                clearInterval(interval);
+                if (!done) console.warn('[AS-Portal] Swap gave up after', attempts, 'attempts');
+            }
         }, delay);
     }
 
     // ── Boot ──────────────────────────────────────────────────────────────────
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => setTimeout(tryApplyNow, 800));
+        document.addEventListener('DOMContentLoaded', () => setTimeout(tryApplyNow, 1000));
     } else {
-        setTimeout(tryApplyNow, 800);
+        setTimeout(tryApplyNow, 1000);
     }
 
-    document.addEventListener('OSAjaxFinished', () => setTimeout(applyAll, 150), true);
+    // OutSystems AJAX hook — clears the guard so a fresh swap runs after refresh
+    document.addEventListener('OSAjaxFinished', () => {
+        // Clear guard on any existing thead so performSwap re-runs cleanly
+        document.querySelectorAll('table[role="grid"] thead tr').forEach(tr => {
+            delete tr.dataset.asSwapped;
+        });
+        setTimeout(applyAll, 200);
+    }, true);
 
+    // MutationObserver — watches for table re-renders
     const observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
             if (mutation.type !== 'childList' || !mutation.addedNodes.length) continue;
             const hasTableContent = Array.from(mutation.addedNodes).some(node =>
                 node.nodeType === 1 && (
-                    node.matches?.('table[role="grid"], tbody, tr, td') ||
+                    node.matches?.('table[role="grid"], tbody, tr, td, thead') ||
                     node.querySelector?.('table[role="grid"]')
                 )
             );
             if (hasTableContent) {
-                setTimeout(applyAll, 100);
+                // Clear guard in case the whole thead was replaced
+                document.querySelectorAll('table[role="grid"] thead tr').forEach(tr => {
+                    delete tr.dataset.asSwapped;
+                });
+                setTimeout(applyAll, 150);
                 break;
             }
         }
@@ -145,5 +182,11 @@
 
     window.addEventListener('resize', expandListContainer, { passive: true });
 
-    console.log('[AS-Portal] Column Swapper + List Expander v1.3 loaded');
+    // Also try once on visibilitychange (catches the "switch tab then back" case
+    // in case the page was still loading when it was first hidden)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') setTimeout(applyAll, 150);
+    });
+
+    console.log('[AS-Portal] Column Swapper + List Expander v1.5 loaded');
 })();
