@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         AS-Portal: Swap Hierarchy Type ↔ Appointment Date + Expand List
 // @namespace    bosch-asportal
-// @version      1.2
+// @version      1.3
 // @description  Swaps "Hierarchy Type" and "Appointment Date" columns; expands request list to fill viewport
 // @author       You
 // @match        https://apps-p-p1-outsystems.de.bosch.com/ASPortal/Welcome*
 // @match        https://apps-p-p1-outsystems.de.bosch.com/ASPortal/RequestDetail*
-// @grant        GM_addStyle
+// @grant        none
 // @run-at       document-idle
 // ==/UserScript==
 (function () {
@@ -17,21 +17,23 @@
     const COL_B = 'Appointment Date';
     let isSwapping = false;
 
-    // ── Inject persistent CSS overrides ──────────────────────────────────────
-    // These handle width; height needs JS because OutSystems writes it as inline style.
-    GM_addStyle(`
-        /* Let the table scroll container fill width naturally */
+    // ── Inject persistent CSS overrides (no GM_addStyle needed) ──────────────
+    function injectCSS(css) {
+        const style = document.createElement('style');
+        style.textContent = css;
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    injectCSS(`
         [id$="-VRequestList_HasData"] {
             width: 100% !important;
             min-width: 0 !important;
             box-sizing: border-box !important;
         }
-        /* Remove fixed widths on the surrounding grid columns if any */
         [id$="-WORKAREA2"],
         [id$="-REQLIST_MYREQUESTS"] {
             width: 100% !important;
         }
-        /* Let the table itself stretch */
         [id$="-VRequestList_HasData"] table {
             width: 100% !important;
         }
@@ -39,15 +41,11 @@
 
     // ── Expand the list container height ─────────────────────────────────────
     function expandListContainer() {
-        // OutSystems hardcodes height:500px as an inline style on this element.
-        // We must fight it in JS since CSS can't override inline styles without !important
-        // on a selector, and GM_addStyle can do that — but height:auto loses scroll,
-        // so we use calc(100vh - top offset) for a proper fill.
         const containers = document.querySelectorAll('[id$="-VRequestList_HasData"]');
         containers.forEach(el => {
             const rect = el.getBoundingClientRect();
             const topOffset = rect.top + window.scrollY;
-            const BOTTOM_PADDING = 24; // px breathing room at the bottom
+            const BOTTOM_PADDING = 24;
             const newHeight = `calc(100vh - ${Math.round(topOffset)}px - ${BOTTOM_PADDING}px)`;
 
             if (el.style.height !== newHeight || el.style.overflow !== 'auto') {
@@ -120,10 +118,8 @@
         setTimeout(tryApplyNow, 800);
     }
 
-    // Re-apply on OutSystems AJAX navigation/refresh
     document.addEventListener('OSAjaxFinished', () => setTimeout(applyAll, 150), true);
 
-    // Re-apply whenever the table area is re-rendered
     const observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
             if (mutation.type !== 'childList' || !mutation.addedNodes.length) continue;
@@ -147,8 +143,7 @@
 
     observer.observe(rootContainer, { childList: true, subtree: true });
 
-    // Re-apply on window resize so the calc() height stays correct
     window.addEventListener('resize', expandListContainer, { passive: true });
 
-    console.log('[AS-Portal] Column Swapper + List Expander v1.2 loaded');
+    console.log('[AS-Portal] Column Swapper + List Expander v1.3 loaded');
 })();
