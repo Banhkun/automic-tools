@@ -25,7 +25,7 @@ const BASE = 'https://raw.githubusercontent.com/Banhkun/automic-tools/main';
 const href = location.href;
 
 // How long (in ms) before a cached script is considered stale and re-fetched.
-// Default: 6 hours. Change to 0 to always fetch fresh (defeats the purpose).
+// Default: 6 hours. Change to 0 to always fetch fresh.
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 // Each entry: [ match(), script file ]
@@ -34,10 +34,6 @@ const ROUTES = [
     match: () => href.includes('rb-wam.bosch.com') && href.includes('f?p=100:32'),
     src: `${BASE}/Detail-Page-Tools.user.js`,
   },
-    {
-    match: () => href.includes('rb-wam.bosch.com') && href.includes('f?p=100:44'),
-    src: `${BASE}/Mal-column-filler.user.js`,
-  },
   {
     match: () => href.includes('apps-p-p1-outsystems.de.bosch.com/ASPortal'),
     src: `${BASE}/Column-Swapper.user.js`,
@@ -45,10 +41,6 @@ const ROUTES = [
   {
     match: () => href.includes('apps-p-p1-outsystems.de.bosch.com/ASPortal'),
     src: `${BASE}/apex-column-copy.user.js`,
-  },
-  {
-    match: () => href.includes('emea.bosch.com/redwood/ui'),
-    src: `${BASE}/runmyjobs-tab-nav.user.js`,
   },
   {
     match: () => href.includes('rb-wam.bosch.com') && href.includes('f?p=100:3035'),
