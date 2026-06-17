@@ -11,8 +11,8 @@
 | `bosch-meta-installer.user.js` | **The one you install** — loads all others | all pages |
 | `Detail-Page-Tools.user.js` | Hamburger copy menu, AWI links, TEMP_DEACTIVATE, expandable description | `ASPortal/*` |
 | `Column-Swapper.user.js` | Swaps "Hierarchy Type" ↔ "Appointment Date" columns | `ASPortal/Welcome*` |
-| `ID36-Generator.user.js` | Generates & copies multiple ID36 values | `rb-wam.bosch.com/...3035*` |
-| `apex-column-copy.user.js` | 📋 copy buttons on IG/IR column headers | `rb-wam.bosch.com/*` |
+| `ID36-Generator.user.js` | Generates & copies multiple ID36 values
+| `apex-column-copy.user.js` | 📋 copy buttons on IG/IR column headers 
 | `runmyjobs-tab-nav.user.js` | Tab/Shift+Tab navigation for UIReact-TabBar | `runmyjobs-dev1.emea.bosch.com/*` |
 
 ---
