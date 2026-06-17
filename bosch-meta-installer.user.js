@@ -43,7 +43,7 @@ const ROUTES = [
     // Adjust the exclusion string to whatever your detail URL contains
     match: () =>
       href.includes("apps-p-p1-outsystems.de.bosch.com/ASPortal") &&
-      !href.includes("RequestDetail"), 
+      !href.includes("RequestDetail"),
     src: `${BASE}/Column-Swapper.user.js`,
   },
   {
