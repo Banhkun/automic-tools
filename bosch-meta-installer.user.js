@@ -39,7 +39,11 @@ const ROUTES = [
     src: `${BASE}/uc4-copy.js`,
   },
   {
-    match: () => href.includes("apps-p-p1-outsystems.de.bosch.com/ASPortal"),
+    // Only run swapper on the list page, not on detail pages
+    // Adjust the exclusion string to whatever your detail URL contains
+    match: () =>
+      href.includes("apps-p-p1-outsystems.de.bosch.com/ASPortal") &&
+      !href.includes("RequestDetail")  // ← adjust to your actual detail URL segment
     src: `${BASE}/Column-Swapper.user.js`,
   },
   {
