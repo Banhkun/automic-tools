@@ -29,23 +29,20 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const ROUTES = [
   {
     name: 'Detail-Page-Tools',
-    match: () => href.includes('rb-wam.bosch.com') && href.includes('f?p=100:32'),
+    match: () => href.includes('apps-p-p1-outsystems.de.bosch.com/ASPortal'),
     src: `${BASE}/Detail-Page-Tools.user.js`,
   },
   {
-    name: 'Mal-Column-Filler',
-    match: () => href.includes('rb-wam.bosch.com') && href.includes('f?p=100:44'),
-    src: `${BASE}/Mal-column-filler.user.js`,
+    match: () => href.includes(".bosch.com/awi/EUP"),
+    src: `${BASE}/uc4-copy.js`,
   },
   {
-    name: 'Column-Swapper',
-    match: () => href.includes('apps-p-p1-outsystems.de.bosch.com/ASPortal'),
+    // Only run swapper on the list page, not on detail pages
+    // Adjust the exclusion string to whatever your detail URL contains
+    match: () =>
+      href.includes("apps-p-p1-outsystems.de.bosch.com/ASPortal") &&
+      !href.includes("RequestDetail"),
     src: `${BASE}/Column-Swapper.user.js`,
-  },
-  {
-    name: 'Apex-Column-Copy',
-    match: () => href.includes('apps-p-p1-outsystems.de.bosch.com/ASPortal'),
-    src: `${BASE}/apex-column-copy.user.js`,
   },
   {
     name: 'RunMyJobs-Tab-Nav',
