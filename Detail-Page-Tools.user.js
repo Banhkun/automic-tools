@@ -125,11 +125,7 @@
   function waitForDescriptionAndExpand() {
     // Guard: body may not exist yet if injected at document-start
     if (!document.body) {
-      document.addEventListener(
-        "DOMContentLoaded",
-        waitForDescriptionAndExpand,
-        { once: true },
-      );
+      document.addEventListener("DOMContentLoaded", waitForDescriptionAndExpand, { once: true });
       return;
     }
 
@@ -334,40 +330,31 @@
   /* ============================================================= */
   /* Initialize                                                    */
   /* ============================================================= */
-  function init() {
-    addAwiLinks();
-    waitForDescriptionAndExpand();
+  addAwiLinks();
+  waitForDescriptionAndExpand();
 
-    setTimeout(addBuildInfoCopyButton, 800);
-    document.addEventListener("OSAjaxFinished", () => {
-      setTimeout(() => {
-        const brc = document.getElementById("BuildRunContent");
-        if (brc) delete brc.dataset.copyBtnAdded;
-        addBuildInfoCopyButton();
-      }, 700);
-    });
+  setTimeout(addBuildInfoCopyButton, 800);
+  document.addEventListener("OSAjaxFinished", () => {
+    setTimeout(() => {
+      const brc = document.getElementById("BuildRunContent");
+      if (brc) delete brc.dataset.copyBtnAdded;
+      addBuildInfoCopyButton();
+    }, 700);
+  });
 
-    const awiObs = new MutationObserver(() => setTimeout(addAwiLinks, 300));
-    awiObs.observe(document.body, { childList: true, subtree: true });
-    document.addEventListener("OSAjaxFinished", () =>
-      setTimeout(addAwiLinks, 400),
-    );
+  const awiObs = new MutationObserver(() => setTimeout(addAwiLinks, 300));
+  awiObs.observe(document.body, { childList: true, subtree: true });
+  document.addEventListener("OSAjaxFinished", () =>
+    setTimeout(addAwiLinks, 400),
+  );
 
-    waitForReqBlock().then((block) => addAutomationObjectCopyButton(block));
-    document.addEventListener("OSAjaxFinished", () => {
-      setTimeout(() => {
-        const block = document.querySelector(REQ_BLOCK_SEL);
-        if (block) addAutomationObjectCopyButton(block);
-      }, 700);
-    });
+  waitForReqBlock().then((block) => addAutomationObjectCopyButton(block));
+  document.addEventListener("OSAjaxFinished", () => {
+    setTimeout(() => {
+      const block = document.querySelector(REQ_BLOCK_SEL);
+      if (block) addAutomationObjectCopyButton(block);
+    }, 700);
+  });
 
-    console.log("AS-Portal Tools + AWI Link v2.6 loaded");
-  }
-
-  // Entry point: defer until DOM is ready
-  if (document.body) {
-    init();
-  } else {
-    document.addEventListener("DOMContentLoaded", init, { once: true });
-  }
+  console.log("AS-Portal Tools + AWI Link v2.6 loaded");
 })();
