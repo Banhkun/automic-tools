@@ -327,13 +327,22 @@
     });
   }
 
-  /* ============================================================= */
-  /* Initialize                                                    */
-  /* ============================================================= */
+/* ============================================================= */
+/* Initialize                                                    */
+/* ============================================================= */
+function init() {
+  // Guard: injected at document-start via meta installer, body may not exist yet
+  if (!document.body) {
+    document.addEventListener("DOMContentLoaded", init, { once: true });
+    return;
+  }
+
   addAwiLinks();
   waitForDescriptionAndExpand();
 
-  setTimeout(addBuildInfoCopyButton, 800);
+  // Replace blind setTimeout with observer-based wait
+  waitForBuildRunContent().then(() => setTimeout(addBuildInfoCopyButton, 300));
+
   document.addEventListener("OSAjaxFinished", () => {
     setTimeout(() => {
       const brc = document.getElementById("BuildRunContent");
@@ -355,6 +364,26 @@
       if (block) addAutomationObjectCopyButton(block);
     }, 700);
   });
+}
 
-  console.log("AS-Portal Tools + AWI Link v2.6 loaded");
+/* ============================================================= */
+/* Wait for BuildRunContent                                      */
+/* ============================================================= */
+function waitForBuildRunContent() {
+  return new Promise((res) => {
+    const existing = document.getElementById("BuildRunContent");
+    if (existing) return res(existing);
+    const obs = new MutationObserver(() => {
+      const el = document.getElementById("BuildRunContent");
+      if (el) {
+        obs.disconnect();
+        res(el);
+      }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+  });
+}
+
+init();
+console.log("AS-Portal Tools + AWI Link v2.6 loaded");
 })();
