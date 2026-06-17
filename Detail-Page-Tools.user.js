@@ -109,9 +109,9 @@
     /* -- Hover peek -- */
     textarea.addEventListener("mouseenter", () => {
       if (!expanded) {
-        textarea.style.height = "220px";
-        slider.value = 220;
-        sizeLabel.textContent = "220px";
+        textarea.style.height = "320px";
+        slider.value = 320;
+        sizeLabel.textContent = "320px";
       }
     });
     textarea.addEventListener("mouseleave", () => {
