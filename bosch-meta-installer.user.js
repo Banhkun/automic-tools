@@ -31,7 +31,7 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 // Each entry: [ match(), script file ]
 const ROUTES = [
   {
-    match: () => href.includes("apps-p-p1-outsystems.de.bosch.com/ASPortal"),
+    match: () => href.includes("apps-p-p1-outsystems.de.bosch.com/ASPortal/RequestDetail"),
     src: `${BASE}/Detail-Page-Tools.user.js`,
   },
   {
