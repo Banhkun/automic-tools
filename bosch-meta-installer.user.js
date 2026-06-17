@@ -31,19 +31,25 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 // Each entry: [ match(), script file ]
 const ROUTES = [
   {
-    match: () => href.includes('apps-p-p1-outsystems.de.bosch.com/ASPortal'),
+    match: () => href.includes("apps-p-p1-outsystems.de.bosch.com/ASPortal"),
     src: `${BASE}/Detail-Page-Tools.user.js`,
   },
   {
-    match: () => href.includes('apps-p-p1-outsystems.de.bosch.com/ASPortal'),
+    match: () => href.includes(".bosch.com/awi/EUP"),
+    src: `${BASE}/uc4-copy.js`,
+  },
+  {
+    match: () => href.includes("apps-p-p1-outsystems.de.bosch.com/ASPortal"),
     src: `${BASE}/Column-Swapper.user.js`,
   },
   {
-    match: () => href.includes('rb-wam.bosch.com') && href.includes('f?p=100:32'),
+    match: () =>
+      href.includes("rb-wam.bosch.com") && href.includes("f?p=100:32"),
     src: `${BASE}/apex-column-copy.user.js`,
   },
   {
-    match: () => href.includes('rb-wam.bosch.com') && href.includes('f?p=100:3035'),
+    match: () =>
+      href.includes("rb-wam.bosch.com") && href.includes("f?p=100:3035"),
     src: `${BASE}/ID36-Generator.user.js`,
   },
 ];
