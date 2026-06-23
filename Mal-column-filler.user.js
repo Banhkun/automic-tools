@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         MALCF: MAL Column Filler
 // @namespace    bosch-asportal
-// @version      1.0
+// @version      1.1
 // @description  Injects paste/fill buttons into APEX grid headers for Comment, Status, and CID columns
 // @author       You
-// @match        https://rb-wam.bosch.com/rb-aeinfoapp/ords/f?p=100:44:*
+// @match        https://rb-wam.*/rb-aeinfoapp/ords/f?p=100:44:*
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
@@ -87,16 +87,29 @@
 
   /* ───────────────────────── DOM HELPERS ───────────────────── */
 
-  function findColIndex(colName) {
-    const headerTable = document.querySelector(".a-GV-w-hdr table");
-    if (!headerTable) return -1;
-    let idx = -1;
-    Array.from(headerTable.querySelectorAll("th")).forEach((th, i) => {
-      const lbl = th.querySelector(".a-GV-headerLabel");
-      if (lbl && lbl.textContent.trim().toLowerCase() === colName.toLowerCase()) idx = i;
-    });
-    return idx;
-  }
+    function findColIndex(colName) {
+        // Find the th in the header and get its data-idx
+        const headerTable = document.querySelector(".a-GV-w-hdr table");
+        if (!headerTable) return -1;
+        let dataIdx = null;
+        for (const th of headerTable.querySelectorAll("th[data-idx]")) {
+            const lbl = th.querySelector(".a-GV-headerLabel");
+            if (lbl && lbl.textContent.trim().toLowerCase() === colName.toLowerCase()) {
+                dataIdx = th.getAttribute("data-idx");
+                break;
+            }
+        }
+        if (dataIdx === null) return -1;
+
+        // Now find the sequential position of that data-idx in the scroll body's colgroup
+        const scrollTable = document.querySelector(".a-GV-w-scroll table");
+        if (!scrollTable) return -1;
+        const cols = scrollTable.querySelectorAll("colgroup col[data-idx]");
+        for (let i = 0; i < cols.length; i++) {
+            if (cols[i].getAttribute("data-idx") === dataIdx) return i;
+        }
+        return -1;
+    }
 
   function findCellsByCol(colName) {
     const idx = findColIndex(colName);
