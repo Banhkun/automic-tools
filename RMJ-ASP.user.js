@@ -2,8 +2,8 @@
 // @name         RMJ-ASPortal Cross Tab Control
 // @namespace    bosch-tools
 // @version      3.4
-// @match        https://runmyjobs-*.*/*
-// @match        https://apps-p-p1-outsystems.*/ASPortal/*
+// @include      https://runmyjobs-dev*.*/*
+// @include      https://apps-p-p1-outsystems.*/ASPortal/*
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_listValues
