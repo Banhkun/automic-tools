@@ -864,7 +864,7 @@ WHERE otd.Name = 'UC4ExternalBusinessKey'
 },
 {
   id: 'find-siblings',
-  label: 'Find Siblings (Same Tag)',
+  label: 'Find Siblings (Same UC4)',
   description:
     'Paste a list of RMJ JobDefinition names (one per line, or comma separated). ' +
     'Returns every OTHER JobDefinition sharing the exact same UC4ExternalBusinessKey ' +
