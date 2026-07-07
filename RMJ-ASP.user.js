@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         RMJ-ASPortal Cross Tab Control
 // @namespace    bosch-tools
-// @version      3.4
-// @include      https://runmyjobs-dev*.*/*
-// @include      *://*/ASPortal/RequestDetail*
+// @version      3.5
+// @include      *://runmyjobs-dev*.*/*
+// @include      *://*/ASPortal/*
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_listValues
@@ -537,6 +537,19 @@
       );
     }
 
+    // ── Scheduling tab scraping (Execution End Date) ──
+    // The date input is disabled/decorative (flatpickr renders a second,
+    // readonly text input on top of it for display), so we read the value
+    // straight off the underlying `type="date"` input rather than trying
+    // to interact with the flatpickr UI.
+
+    function parseSchedulingInfo() {
+      const dateInput = document.querySelector('input[id$="-Input_EndDate"]');
+      return {
+        lifecycleExpiring: dateInput?.value?.trim() || null
+      };
+    }
+
     let isProcessing = false;
 
     setInterval(() => {
@@ -575,11 +588,28 @@
 
               openOverviewAndParse((calls) => {
                 const mergedCalls = mergeJobDescriptions(calls, jobDescMap);
-                GM_setValue('asportal_result', JSON.stringify({
-                  ts: Date.now(),
-                  data: { requestId: myRequestId, requestInfo, calls: mergedCalls }
-                }));
-                isProcessing = false;
+
+                console.log('[ASPortal] Ensuring Scheduling tab...');
+                ensureTabActive('Scheduling');
+
+                waitFor(
+                  () => !!document.querySelector('input[id$="-Input_EndDate"]'),
+                  () => {
+                    const schedulingInfo = parseSchedulingInfo();
+                    console.log('[ASPortal] Scheduling Info parsed:', schedulingInfo);
+
+                    GM_setValue('asportal_result', JSON.stringify({
+                      ts: Date.now(),
+                      data: {
+                        requestId: myRequestId,
+                        requestInfo,
+                        schedulingInfo,
+                        calls: mergedCalls
+                      }
+                    }));
+                    isProcessing = false;
+                  }
+                );
               });
             }
           );
