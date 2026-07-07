@@ -4,8 +4,8 @@
 // @version      1.5
 // @description  Swaps "Hierarchy Type" and "Appointment Date" columns; expands request list to fill viewport
 // @author       You
-// @match        https://apps-p-p1-outsystems.de.bosch.com/ASPortal/Welcome*
-// @match        https://apps-p-p1-outsystems.de.bosch.com/ASPortal/RequestDetail*
+// @match        *://*/ASPortal/Welcome*
+// @match        *://*/ASPortal/RequestDetail*
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
