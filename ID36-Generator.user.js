@@ -4,7 +4,7 @@
 // @version      1.1
 // @description  Generates and copies multiple values from APEX by replaying the backend request
 // @author       Minh Dinh
-// @match        https://rb-wam.bosch.com/rb-aeinfoapp/ords/f?p=100:3035*
+// @match        *://*/rb-aeinfoapp/ords/f?p=100:3035*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
