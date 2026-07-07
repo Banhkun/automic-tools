@@ -4,7 +4,7 @@
 // @version      1.1
 // @description  Injects paste/fill buttons into APEX grid headers for Comment, Status, and CID columns
 // @author       You
-// @match        https://rb-wam.*/rb-aeinfoapp/ords/f?p=100:44:*
+// @match        *://*/rb-aeinfoapp/ords/f?p=100:44:*
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
