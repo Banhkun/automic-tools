@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RMJ-ASPortal Cross Tab Control
 // @namespace    bosch-tools
-// @version      3.5
+// @version      3.6
 // @include      *://runmyjobs-dev*.*/*
 // @include      *://*/ASPortal/*
 // @grant        GM_setValue
@@ -10,6 +10,7 @@
 // @grant        GM_deleteValue
 // @grant        GM_registerMenuCommand
 // @grant        GM_openInTab
+// @grant        GM_addValueChangeListener
 // ==/UserScript==
 
 (function () {
@@ -120,10 +121,10 @@
         console.log('[RMJ] heartbeat requestId:', heartbeatData?.requestId, '| input requestId:', requestId);
         console.log('[RMJ] age:', heartbeatData ? Date.now() - heartbeatData.ts : 'N/A', 'ms');
 
+        // RMJ side — loosen the staleness window to tolerate background-tab throttling
         const isAlive = heartbeatData &&
-              (Date.now() - heartbeatData.ts < 10000) &&
-              String(heartbeatData.requestId) === String(requestId);
-
+                (Date.now() - heartbeatData.ts < 45000) &&   // was 10000
+                String(heartbeatData.requestId) === String(requestId);
 
         if (!isAlive) {
           console.log('[RMJ] ASPortal tab not found for RequestId:', requestId, '— opening...');
@@ -228,35 +229,35 @@
       console.log('[RMJ] UI injected');
     }
 
-    let lastResultTs = null;
-    function startResultPoller() {
-      setInterval(() => {
-        const raw = GM_getValue('asportal_result');
-        if (!raw) return;
-        const result = JSON.parse(raw);
-        if (result.ts === lastResultTs) return;
-        lastResultTs = result.ts;
-        GM_setValue('asportal_result', '');
+    // Result handling is now event-driven via GM_addValueChangeListener
+    // instead of a 500ms poll — fires immediately when ASPortal writes
+    // 'asportal_result', with no dependency on this tab being focused.
+    function handleResult(result) {
+      const callsInput = findInputByLabel('Calls');
+      const btn = document.getElementById('asp-fetch-btn');
 
-        const callsInput = findInputByLabel('Calls');
-        const btn = document.getElementById('asp-fetch-btn');
-
-        if (callsInput) {
-          const formatted = JSON.stringify(result.data, null, 2);
-          const ta = document.getElementById('asp-calls-textarea');
-          if (ta) ta.value = formatted;
-          const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-          nativeSetter.call(callsInput, formatted);
-          callsInput.dispatchEvent(new Event('input', { bubbles: true }));
-          callsInput.dispatchEvent(new Event('change', { bubbles: true }));
-          console.log('[RMJ] Calls field populated');
-        }
-        if (btn) {
-          btn.textContent = '📋 Fetch from ASPortal';
-          btn.disabled = false;
-        }
-      }, 500);
+      if (callsInput) {
+        const formatted = JSON.stringify(result.data, null, 2);
+        const ta = document.getElementById('asp-calls-textarea');
+        if (ta) ta.value = formatted;
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(callsInput, formatted);
+        callsInput.dispatchEvent(new Event('input', { bubbles: true }));
+        callsInput.dispatchEvent(new Event('change', { bubbles: true }));
+        console.log('[RMJ] Calls field populated');
+      }
+      if (btn) {
+        btn.textContent = '📋 Fetch from ASPortal';
+        btn.disabled = false;
+      }
     }
+
+    GM_addValueChangeListener('asportal_result', (name, oldValue, newValue, remote) => {
+      if (!newValue) return;
+      const result = JSON.parse(newValue);
+      GM_setValue('asportal_result', '');
+      handleResult(result);
+    });
 
     function watchForDialog() {
       const observer = new MutationObserver(() => {
@@ -269,7 +270,6 @@
     }
 
     watchForDialog();
-    startResultPoller();
 
     // Keep suggestions fresh even while the dialog is already open
     refreshRequestIdDatalist();
@@ -278,7 +278,6 @@
 
   // ── ASPortal side ──
   if (isASPortal) {
-    let lastTs = null;
 
     function getCurrentRequestId() {
       return new URLSearchParams(location.search).get('RequestId');
@@ -552,19 +551,14 @@
 
     let isProcessing = false;
 
-    setInterval(() => {
-      const raw = GM_getValue('asportal_command');
-      if (!raw) return;
-      const cmd = JSON.parse(raw);
-      if (cmd.ts === lastTs) return;
+    // Command handling is now event-driven via GM_addValueChangeListener
+    // instead of a 500ms poll. This avoids background-tab throttling —
+    // the listener fires promptly on the storage write regardless of
+    // whether this tab currently has focus.
+    function handleCommand(cmd) {
       const myRequestId = getCurrentRequestId();
       if (cmd.requestId !== myRequestId) return;
       if (isProcessing) return;
-      lastTs = cmd.ts;
-      // Consume the command immediately so a page reload / userscript
-      // re-init (which resets lastTs to null) can't re-trigger this
-      // same stale command again.
-      GM_setValue('asportal_command', '');
       if (cmd.action !== 'click_and_parse') return;
       isProcessing = true;
 
@@ -615,10 +609,20 @@
           );
         }
       );
-    }, 500);
+    }
+
+    GM_addValueChangeListener('asportal_command', (name, oldValue, newValue, remote) => {
+      if (!newValue) return;
+      const cmd = JSON.parse(newValue);
+      // Consume the command immediately so a page reload / userscript
+      // re-init can't re-trigger this same command again.
+      GM_setValue('asportal_command', '');
+      handleCommand(cmd);
+    });
 
     // Heartbeat is scoped per Request ID so RMJ can see *every* open
     // ASPortal tab at once (not just the most recently active one).
+    // ASPortal side — write a heartbeat immediately at script init, not just on the first interval tick
     setInterval(() => {
       const reqId = getCurrentRequestId();
       if (!reqId) return;
@@ -629,6 +633,17 @@
       }));
     }, 3000);
 
+    (function heartbeatNow() {
+      const reqId = getCurrentRequestId();
+      if (reqId) {
+        GM_setValue('asportal_heartbeat_' + reqId, JSON.stringify({
+          ts: Date.now(),
+          requestId: reqId,
+          title: document.title || null
+        }));
+      }
+    })();
+
     // Clean up this tab's heartbeat when it closes/navigates away so it
     // doesn't linger as a stale suggestion on the RMJ side.
     window.addEventListener('beforeunload', () => {
@@ -636,7 +651,7 @@
       if (reqId) GM_deleteValue('asportal_heartbeat_' + reqId);
     });
 
-    console.log('[ASPortal] Polling for commands... RequestId:', getCurrentRequestId());
+    console.log('[ASPortal] Polling for heartbeat, listening for commands... RequestId:', getCurrentRequestId());
   }
 
 })();
