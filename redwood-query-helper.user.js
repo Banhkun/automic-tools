@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Redwood Support Query Helper
 // @namespace    redwood-query-helper
-// @version      0.5.0
+// @version      0.5.1
 // @description  Adds tabbed, reusable SQL query templates to the Redwood /redwood/support/query page (e.g. "find parent job chain for a list of job definitions").
 // @match        *://*/redwood/support
 // @match        *://*/redwood/support/
@@ -782,16 +782,32 @@ function extractChainSteps(table) {
   return result;
 }
 
-// Renders one chain as an SVG node graph: boxes left-to-right in sequence
-// order, wrapping to a new row (with an elbow connector) past ~5 nodes/row.
+// Renders one chain as an SVG node graph. Steps sharing the same
+// SequenceNumber run in parallel in RMJ/UC4, so they're grouped into one
+// COLUMN (stacked vertically) rather than placed one after another;
+// distinct sequence numbers become successive columns left-to-right.
+// Arrows fan from every node in a column to every node in the next column,
+// since (absent explicit branch/condition data) each step in a column
+// depends on the whole previous column completing.
 function buildChainSvg(chain) {
-  const NODE_W = 160, NODE_H = 44, GAP_X = 50, GAP_Y = 28, PAD = 12, ROW_WIDTH = 900;
-  const perRow = Math.max(1, Math.floor((ROW_WIDTH - PAD * 2 + GAP_X) / (NODE_W + GAP_X)));
-  const rows = Math.ceil(chain.steps.length / perRow);
-  const width = PAD * 2 + Math.min(chain.steps.length, perRow) * (NODE_W + GAP_X) - GAP_X;
-  const height = PAD * 2 + rows * (NODE_H + GAP_Y) - GAP_Y;
-
+  const NODE_W = 160, NODE_H = 44, GAP_X = 70, GAP_Y = 16, PAD = 12;
   const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  // Group steps by SequenceNumber, preserving ascending seq order. Steps
+  // within a column keep their original (stable-sorted) relative order.
+  const bySeq = new Map();
+  chain.steps.forEach((step) => {
+    if (!bySeq.has(step.seq)) bySeq.set(step.seq, []);
+    bySeq.get(step.seq).push(step);
+  });
+  const columns = Array.from(bySeq.keys())
+    .sort((a, b) => a - b)
+    .map((seq) => ({ seq, steps: bySeq.get(seq) }));
+
+  const maxRows = Math.max(1, ...columns.map((c) => c.steps.length));
+  const width = PAD * 2 + columns.length * (NODE_W + GAP_X) - GAP_X;
+  const height = PAD * 2 + maxRows * (NODE_H + GAP_Y) - GAP_Y;
+
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', `0 0 ${Math.max(width, 200)} ${Math.max(height, NODE_H + PAD * 2)}`);
   svg.setAttribute('width', Math.max(width, 200));
@@ -815,60 +831,78 @@ function buildChainSvg(chain) {
   svg.appendChild(defs);
   const arrowMarkerUrl = `url(#${marker.id})`;
 
-  chain.steps.forEach((step, i) => {
-    const row = Math.floor(i / perRow);
-    const col = i % perRow;
-    const x = PAD + col * (NODE_W + GAP_X);
-    const y = PAD + row * (NODE_H + GAP_Y);
+  // Precompute each column's x and each node's y (vertically centered
+  // within the column when it has fewer nodes than the tallest column).
+  const innerHeight = height - PAD * 2;
+  columns.forEach((col, ci) => {
+    col.x = PAD + ci * (NODE_W + GAP_X);
+    const colHeight = col.steps.length * (NODE_H + GAP_Y) - GAP_Y;
+    const yStart = PAD + (innerHeight - colHeight) / 2;
+    col.ys = col.steps.map((_, ri) => yStart + ri * (NODE_H + GAP_Y));
+  });
 
-    if (i > 0) {
-      const prevRow = Math.floor((i - 1) / perRow);
-      const prevCol = (i - 1) % perRow;
-      if (prevRow === row) {
-        const px = PAD + prevCol * (NODE_W + GAP_X) + NODE_W;
-        const py = y + NODE_H / 2;
-        const line = document.createElementNS(SVG_NS, 'line');
-        line.setAttribute('x1', px); line.setAttribute('y1', py);
-        line.setAttribute('x2', x); line.setAttribute('y2', py);
-        line.setAttribute('stroke', '#6598CB'); line.setAttribute('stroke-width', '2');
-        line.setAttribute('marker-end', arrowMarkerUrl);
-        svg.appendChild(line);
-      } else {
-        const prevX = PAD + prevCol * (NODE_W + GAP_X) + NODE_W / 2;
-        const prevY = PAD + prevRow * (NODE_H + GAP_Y) + NODE_H;
-        const midY = prevY + GAP_Y / 2;
-        const path = document.createElementNS(SVG_NS, 'path');
-        path.setAttribute('d', `M${prevX},${prevY} L${prevX},${midY} L${x + NODE_W / 2},${midY} L${x + NODE_W / 2},${y}`);
-        path.setAttribute('stroke', '#6598CB'); path.setAttribute('stroke-width', '2'); path.setAttribute('fill', 'none');
-        path.setAttribute('marker-end', arrowMarkerUrl);
-        svg.appendChild(path);
-      }
-    }
+  // Fan arrows from every node in column i-1 to every node in column i.
+  for (let ci = 1; ci < columns.length; ci++) {
+    const prev = columns[ci - 1];
+    const cur = columns[ci];
+    prev.ys.forEach((py) => {
+      const px = prev.x + NODE_W;
+      const pcy = py + NODE_H / 2;
+      cur.ys.forEach((cy) => {
+        const cx = cur.x;
+        const ccy = cy + NODE_H / 2;
+        if (pcy === ccy) {
+          const line = document.createElementNS(SVG_NS, 'line');
+          line.setAttribute('x1', px); line.setAttribute('y1', pcy);
+          line.setAttribute('x2', cx); line.setAttribute('y2', ccy);
+          line.setAttribute('stroke', '#6598CB'); line.setAttribute('stroke-width', '1.5');
+          line.setAttribute('marker-end', arrowMarkerUrl);
+          svg.appendChild(line);
+        } else {
+          // Gentle curve so fan-out/fan-in lines between parallel nodes
+          // don't overlap straight through other boxes.
+          const midX = (px + cx) / 2;
+          const path = document.createElementNS(SVG_NS, 'path');
+          path.setAttribute('d', `M${px},${pcy} C${midX},${pcy} ${midX},${ccy} ${cx},${ccy}`);
+          path.setAttribute('stroke', '#6598CB'); path.setAttribute('stroke-width', '1.5'); path.setAttribute('fill', 'none');
+          path.setAttribute('marker-end', arrowMarkerUrl);
+          svg.appendChild(path);
+        }
+      });
+    });
+  }
 
-    const rect = document.createElementNS(SVG_NS, 'rect');
-    rect.setAttribute('x', x); rect.setAttribute('y', y);
-    rect.setAttribute('width', NODE_W); rect.setAttribute('height', NODE_H);
-    rect.setAttribute('rx', 6);
-    rect.setAttribute('fill', '#eaf2fb'); rect.setAttribute('stroke', '#6598CB'); rect.setAttribute('stroke-width', '1.5');
-    svg.appendChild(rect);
+  // Draw nodes on top of the arrows.
+  columns.forEach((col) => {
+    col.steps.forEach((step, ri) => {
+      const x = col.x;
+      const y = col.ys[ri];
 
-    const badge = document.createElementNS(SVG_NS, 'text');
-    badge.setAttribute('x', x + 6); badge.setAttribute('y', y + 13);
-    badge.setAttribute('font-size', '9'); badge.setAttribute('fill', '#6598CB');
-    badge.setAttribute('font-family', 'verdana, sans-serif'); badge.setAttribute('font-weight', 'bold');
-    badge.textContent = `#${step.seq}`;
-    svg.appendChild(badge);
+      const rect = document.createElementNS(SVG_NS, 'rect');
+      rect.setAttribute('x', x); rect.setAttribute('y', y);
+      rect.setAttribute('width', NODE_W); rect.setAttribute('height', NODE_H);
+      rect.setAttribute('rx', 6);
+      rect.setAttribute('fill', '#eaf2fb'); rect.setAttribute('stroke', '#6598CB'); rect.setAttribute('stroke-width', '1.5');
+      svg.appendChild(rect);
 
-    const label = document.createElementNS(SVG_NS, 'text');
-    label.setAttribute('x', x + NODE_W / 2); label.setAttribute('y', y + NODE_H / 2 + 9);
-    label.setAttribute('text-anchor', 'middle'); label.setAttribute('font-size', '10.5');
-    label.setAttribute('font-family', 'verdana, sans-serif'); label.setAttribute('fill', '#0e2f44');
-    const maxChars = 24;
-    label.textContent = step.name.length > maxChars ? step.name.slice(0, maxChars - 1) + '…' : step.name;
-    const titleEl = document.createElementNS(SVG_NS, 'title');
-    titleEl.textContent = step.name;
-    label.appendChild(titleEl);
-    svg.appendChild(label);
+      const badge = document.createElementNS(SVG_NS, 'text');
+      badge.setAttribute('x', x + 6); badge.setAttribute('y', y + 13);
+      badge.setAttribute('font-size', '9'); badge.setAttribute('fill', '#6598CB');
+      badge.setAttribute('font-family', 'verdana, sans-serif'); badge.setAttribute('font-weight', 'bold');
+      badge.textContent = `#${step.seq}`;
+      svg.appendChild(badge);
+
+      const label = document.createElementNS(SVG_NS, 'text');
+      label.setAttribute('x', x + NODE_W / 2); label.setAttribute('y', y + NODE_H / 2 + 9);
+      label.setAttribute('text-anchor', 'middle'); label.setAttribute('font-size', '10.5');
+      label.setAttribute('font-family', 'verdana, sans-serif'); label.setAttribute('fill', '#0e2f44');
+      const maxChars = 24;
+      label.textContent = step.name.length > maxChars ? step.name.slice(0, maxChars - 1) + '…' : step.name;
+      const titleEl = document.createElementNS(SVG_NS, 'title');
+      titleEl.textContent = step.name;
+      label.appendChild(titleEl);
+      svg.appendChild(label);
+    });
   });
 
   return svg;
@@ -1029,7 +1063,7 @@ JOIN JobDefinition jcd ON jcd.UniqueId = jc.JobDefinition
 JOIN JobChainStep jcs ON jcs.JobChain= jc.UniqueId
 JOIN JobChainCall jcc ON jcc.JobChainStep = jcs.UniqueId
 JOIN JobDefinition jd ON jcc.JobDefinition = jd.UniqueId
-WHERE jcd.Name IN (${inList})`;
+WHERE jcd.Name IN (${inList}) AND jcd.BranchedLLPVersion = -1`;
       },
     },
 {
