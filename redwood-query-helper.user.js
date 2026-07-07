@@ -806,7 +806,7 @@ WHERE jd.Name IN (${inList})`;
         if (list.length === 0) return null;
 
         const inList = sqlInList(list);
-        return `SELECT jcd.Partition AS PartitionName, jcd.Name, jcs.SequenceNumber, jd.Name
+        return `SELECT jcd.Partition AS PartitionName, jcd.Name AS ChainName, jcs.SequenceNumber AS STEP, jd.Name AS ChildName
 FROM JobChain jc
 JOIN JobDefinition jcd ON jcd.UniqueId = jc.JobDefinition
 JOIN JobChainStep jcs ON jcs.JobChain= jc.UniqueId
