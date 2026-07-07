@@ -5,12 +5,10 @@
 // @description  Intercepts RMJ job file iframes that serve raw CSVs and
 //               replaces them with an inline styled HTML table.
 //               Adds sticky row-number column + click header to copy column.
-// @include      https://runmyjobs-*.emea.bosch.com/redwood/*
+// @include      *://*/redwood/ui*
 // @grant        GM_xmlhttpRequest
 // @connect      runmyjobs-dev1.emea.bosch.com
-// @connect      runmyjobs.emea.bosch.com
-// @connect      runmyjobs-dev1.bosch.com
-// @connect      runmyjobs.bosch.com
+
 // @run-at       document-idle
 // ==/UserScript==
 
