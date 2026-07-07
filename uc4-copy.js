@@ -4,8 +4,8 @@
 // @version      1.2
 // @description  Adds a Copy button to each column header in Vaadin tables, copying all cell values in that column to clipboard line by line
 // @author       You
-// @match        https://rb-eup6.bosch.com/awi/EUP6/*
-// @match        https://rb-eup7.bosch.com/awi/EUP7/*
+// @match        *://*/awi/EUP6/*
+// @match        *://*/awi/EUP7/*
 // @grant        GM_setClipboard
 // @run-at       document-idle
 // ==/UserScript==
