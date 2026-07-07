@@ -4,7 +4,7 @@
 // @version      2.6
 // @description  Build Info copy button + AWI links + Auto Expandable Description + Automation Object copy button
 // @author       Minh Dinh
-// @match        https://apps-p-p1-outsystems.de.bosch.com/ASPortal/*
+// @match        *://*/ASPortal/*
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
