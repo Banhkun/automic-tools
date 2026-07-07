@@ -3,7 +3,7 @@
 // @namespace    bosch-tools
 // @version      3.4
 // @include      https://runmyjobs-dev*.*/*
-// @include      https://apps-p-p1-outsystems.*/ASPortal/*
+// @include      *://*/ASPortal/*
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_listValues
