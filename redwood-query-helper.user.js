@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Redwood Support Query Helper
 // @namespace    redwood-query-helper
-// @version      0.4.0
+// @version      0.5.0
 // @description  Adds tabbed, reusable SQL query templates to the Redwood /redwood/support/query page (e.g. "find parent job chain for a list of job definitions").
 // @match        *://*/redwood/support
 // @match        *://*/redwood/support/
@@ -709,6 +709,223 @@ function parseUc4NameColumn(table) {
 function scanAndParseUc4Names() {
   document.querySelectorAll('table.report-outside').forEach(parseUc4NameColumn);
 }
+
+/* -----------------------------------------------------------------------
+ * 1e. WORKFLOW GRAPH VIEW (List Steps results)
+ * -------------------------------------------------------------------
+ * "List Steps" returns rows of (PartitionName, ChainName, SequenceNumber,
+ * StepName). Reading that as a table to understand execution order is
+ * tedious for chains with more than a handful of steps. This adds a
+ * toggle button above the result table that renders each JobChain as a
+ * left-to-right node graph (boxes = steps, arrows = sequence order),
+ * wrapping to additional rows for long chains, and rendering one diagram
+ * per chain if several chain names were queried at once.
+ *
+ * Only activates when the last-submitted tab was 'list-steps' (tracked
+ * via the same 'rqh-active-tab' sessionStorage flag already used to
+ * restore tab UI state after the full-page-reload form submit), so it
+ * never misfires on other tabs' result tables.
+ * ---------------------------------------------------------------------*/
+
+function injectRQHGraphStyles() {
+  if (document.getElementById('rqh-graph-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'rqh-graph-styles';
+  style.textContent = `
+    .rqh-graph-toggle-btn {
+      font-family: verdana, sans-serif; font-size: 12px;
+      padding: 4px 10px; margin: 6px 0; cursor: pointer;
+      border: 1px solid #999; background: #e0e0e0; border-radius: 3px;
+    }
+    .rqh-graph-toggle-btn:hover { background: #d0d0d0; }
+    .rqh-graph-panel {
+      display: none; margin: 8px 0 14px 0; padding: 10px;
+      border: 1px solid #ccc; background: #fbfbfb; overflow-x: auto;
+    }
+    .rqh-graph-chain-title {
+      font-family: verdana, sans-serif; font-size: 12px; font-weight: bold;
+      color: #1a5276; margin: 10px 0 4px 0;
+    }
+    .rqh-graph-chain-title:first-child { margin-top: 0; }
+  `;
+  document.head.appendChild(style);
+}
+
+// Reads a "List Steps" result table into [{ partition, chain, steps: [{seq, name}] }],
+// grouped by (PartitionName, ChainName) and sorted by SequenceNumber.
+// Column order (ignoring the injected "No." column) is fixed by the
+// 'list-steps' SQL: PartitionName, ChainName, SequenceNumber, StepName.
+function extractChainSteps(table) {
+  const thead = table.tHead;
+  const tbody = table.tBodies && table.tBodies[0];
+  if (!thead || !tbody || !thead.rows.length) return [];
+
+  const labelRow = thead.rows[0];
+  const dataHeaderCells = Array.from(labelRow.cells).filter((c) => !c.classList.contains('rqh-col-no'));
+  if (dataHeaderCells.length < 4) return [];
+
+  const groups = new Map(); // key: partition + "\u0000" + chain -> { partition, chain, steps }
+  Array.from(tbody.rows).forEach((tr) => {
+    const cells = Array.from(tr.cells).filter((c) => !c.classList.contains('rqh-col-no'));
+    if (cells.length < 4) return;
+    const partition = cells[0].textContent.trim();
+    const chain = cells[1].textContent.trim();
+    const seq = parseInt(cells[2].textContent.trim(), 10);
+    const step = cells[3].textContent.trim();
+    const key = partition + '\u0000' + chain;
+    if (!groups.has(key)) groups.set(key, { partition, chain, steps: [] });
+    groups.get(key).steps.push({ seq: isNaN(seq) ? 0 : seq, name: step });
+  });
+
+  const result = Array.from(groups.values());
+  result.forEach((g) => g.steps.sort((a, b) => a.seq - b.seq));
+  return result;
+}
+
+// Renders one chain as an SVG node graph: boxes left-to-right in sequence
+// order, wrapping to a new row (with an elbow connector) past ~5 nodes/row.
+function buildChainSvg(chain) {
+  const NODE_W = 160, NODE_H = 44, GAP_X = 50, GAP_Y = 28, PAD = 12, ROW_WIDTH = 900;
+  const perRow = Math.max(1, Math.floor((ROW_WIDTH - PAD * 2 + GAP_X) / (NODE_W + GAP_X)));
+  const rows = Math.ceil(chain.steps.length / perRow);
+  const width = PAD * 2 + Math.min(chain.steps.length, perRow) * (NODE_W + GAP_X) - GAP_X;
+  const height = PAD * 2 + rows * (NODE_H + GAP_Y) - GAP_Y;
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${Math.max(width, 200)} ${Math.max(height, NODE_H + PAD * 2)}`);
+  svg.setAttribute('width', Math.max(width, 200));
+  svg.setAttribute('height', Math.max(height, NODE_H + PAD * 2));
+  svg.style.display = 'block';
+  svg.style.marginBottom = '6px';
+
+  const defs = document.createElementNS(SVG_NS, 'defs');
+  const marker = document.createElementNS(SVG_NS, 'marker');
+  marker.setAttribute('id', 'rqh-arrow-' + Math.random().toString(36).slice(2));
+  marker.setAttribute('markerWidth', '8');
+  marker.setAttribute('markerHeight', '8');
+  marker.setAttribute('refX', '7');
+  marker.setAttribute('refY', '4');
+  marker.setAttribute('orient', 'auto');
+  const arrowPath = document.createElementNS(SVG_NS, 'path');
+  arrowPath.setAttribute('d', 'M0,0 L8,4 L0,8 Z');
+  arrowPath.setAttribute('fill', '#6598CB');
+  marker.appendChild(arrowPath);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+  const arrowMarkerUrl = `url(#${marker.id})`;
+
+  chain.steps.forEach((step, i) => {
+    const row = Math.floor(i / perRow);
+    const col = i % perRow;
+    const x = PAD + col * (NODE_W + GAP_X);
+    const y = PAD + row * (NODE_H + GAP_Y);
+
+    if (i > 0) {
+      const prevRow = Math.floor((i - 1) / perRow);
+      const prevCol = (i - 1) % perRow;
+      if (prevRow === row) {
+        const px = PAD + prevCol * (NODE_W + GAP_X) + NODE_W;
+        const py = y + NODE_H / 2;
+        const line = document.createElementNS(SVG_NS, 'line');
+        line.setAttribute('x1', px); line.setAttribute('y1', py);
+        line.setAttribute('x2', x); line.setAttribute('y2', py);
+        line.setAttribute('stroke', '#6598CB'); line.setAttribute('stroke-width', '2');
+        line.setAttribute('marker-end', arrowMarkerUrl);
+        svg.appendChild(line);
+      } else {
+        const prevX = PAD + prevCol * (NODE_W + GAP_X) + NODE_W / 2;
+        const prevY = PAD + prevRow * (NODE_H + GAP_Y) + NODE_H;
+        const midY = prevY + GAP_Y / 2;
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', `M${prevX},${prevY} L${prevX},${midY} L${x + NODE_W / 2},${midY} L${x + NODE_W / 2},${y}`);
+        path.setAttribute('stroke', '#6598CB'); path.setAttribute('stroke-width', '2'); path.setAttribute('fill', 'none');
+        path.setAttribute('marker-end', arrowMarkerUrl);
+        svg.appendChild(path);
+      }
+    }
+
+    const rect = document.createElementNS(SVG_NS, 'rect');
+    rect.setAttribute('x', x); rect.setAttribute('y', y);
+    rect.setAttribute('width', NODE_W); rect.setAttribute('height', NODE_H);
+    rect.setAttribute('rx', 6);
+    rect.setAttribute('fill', '#eaf2fb'); rect.setAttribute('stroke', '#6598CB'); rect.setAttribute('stroke-width', '1.5');
+    svg.appendChild(rect);
+
+    const badge = document.createElementNS(SVG_NS, 'text');
+    badge.setAttribute('x', x + 6); badge.setAttribute('y', y + 13);
+    badge.setAttribute('font-size', '9'); badge.setAttribute('fill', '#6598CB');
+    badge.setAttribute('font-family', 'verdana, sans-serif'); badge.setAttribute('font-weight', 'bold');
+    badge.textContent = `#${step.seq}`;
+    svg.appendChild(badge);
+
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.setAttribute('x', x + NODE_W / 2); label.setAttribute('y', y + NODE_H / 2 + 9);
+    label.setAttribute('text-anchor', 'middle'); label.setAttribute('font-size', '10.5');
+    label.setAttribute('font-family', 'verdana, sans-serif'); label.setAttribute('fill', '#0e2f44');
+    const maxChars = 24;
+    label.textContent = step.name.length > maxChars ? step.name.slice(0, maxChars - 1) + '…' : step.name;
+    const titleEl = document.createElementNS(SVG_NS, 'title');
+    titleEl.textContent = step.name;
+    label.appendChild(titleEl);
+    svg.appendChild(label);
+  });
+
+  return svg;
+}
+
+function addWorkflowGraphView(table) {
+  if (!table || table.dataset.rqhGraphAdded) return;
+
+  let activeTabId = null;
+  try {
+    const saved = sessionStorage.getItem('rqh-active-tab');
+    if (saved) activeTabId = JSON.parse(saved).id;
+  } catch (e) {
+    /* ignore malformed/unavailable storage */
+  }
+  if (activeTabId !== 'list-steps') return;
+
+  const chains = extractChainSteps(table);
+  if (!chains.length) return;
+
+  table.dataset.rqhGraphAdded = '1';
+  injectRQHGraphStyles();
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'rqh-graph-toggle-btn';
+  btn.textContent = '🔀 Show as workflow diagram';
+
+  const panel = document.createElement('div');
+  panel.className = 'rqh-graph-panel';
+
+  let built = false;
+  btn.addEventListener('click', () => {
+    const showing = panel.style.display === 'block';
+    if (!showing && !built) {
+      chains.forEach((chain) => {
+        const title = document.createElement('div');
+        title.className = 'rqh-graph-chain-title';
+        title.textContent = `${chain.chain} (${chain.partition}) — ${chain.steps.length} step(s)`;
+        panel.appendChild(title);
+        panel.appendChild(buildChainSvg(chain));
+      });
+      built = true;
+    }
+    panel.style.display = showing ? 'none' : 'block';
+    btn.textContent = showing ? '🔀 Show as workflow diagram' : '🔼 Hide workflow diagram';
+  });
+
+  const anchor = table.closest('.rqh-report-wrap') || table;
+  anchor.parentNode.insertBefore(btn, anchor);
+  anchor.parentNode.insertBefore(panel, anchor);
+}
+
+function scanAndAddGraphViews() {
+  document.querySelectorAll('table.report-outside').forEach(addWorkflowGraphView);
+}
+
   // Collects an <h3>...</h3><textarea>...</textarea>[<hr>] block: the text
   // inside the textarea, plus every node from the h3 through the trailing
   // <hr> (inclusive) so the whole thing can be removed afterward.
@@ -806,7 +1023,7 @@ WHERE jd.Name IN (${inList})`;
         if (list.length === 0) return null;
 
         const inList = sqlInList(list);
-        return `SELECT jcd.Partition AS PartitionName, jcd.Name AS ChainName, jcs.SequenceNumber AS STEP, jd.Name AS ChildName
+        return `SELECT jcd.Partition AS PartitionName, jcd.Name, jcs.SequenceNumber, jd.Name
 FROM JobChain jc
 JOIN JobDefinition jcd ON jcd.UniqueId = jc.JobDefinition
 JOIN JobChainStep jcs ON jcs.JobChain= jc.UniqueId
@@ -864,7 +1081,7 @@ WHERE otd.Name = 'UC4ExternalBusinessKey'
 },
 {
   id: 'find-siblings',
-  label: 'Find Siblings (Same UC4)',
+  label: 'Find Siblings (Same Tag)',
   description:
     'Paste a list of RMJ JobDefinition names (one per line, or comma separated). ' +
     'Returns every OTHER JobDefinition sharing the exact same UC4ExternalBusinessKey ' +
@@ -1119,12 +1336,14 @@ if (!ensureQueryPageRendered()) {
   scanAndEnhanceReportTables();
   compactQueryMeta();
   scanAndParseUc4Names();
+  scanAndAddGraphViews();
   scanAndMakeResizable();
   scanAndAddCsvLinks();
   new MutationObserver(() => {
     scanAndEnhanceReportTables();
     compactQueryMeta();
     scanAndParseUc4Names();
+    scanAndAddGraphViews();
     scanAndMakeResizable();
     scanAndAddCsvLinks();
   }).observe(document.body, {
