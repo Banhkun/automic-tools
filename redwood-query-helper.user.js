@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Redwood Support Query Helper
 // @namespace    redwood-query-helper
-// @version      0.5.1
+// @version      0.7.0
 // @description  Adds tabbed, reusable SQL query templates to the Redwood /redwood/support/query page (e.g. "find parent job chain for a list of job definitions").
 // @match        *://*/redwood/support
 // @match        *://*/redwood/support/
@@ -11,9 +11,9 @@
 // ==/UserScript==
 
 (function () {
-  'use strict';
+    'use strict';
 
-  /* -----------------------------------------------------------------------
+    /* -----------------------------------------------------------------------
    * 0. AUTO-RENDER THE QUERY PAGE
    * -------------------------------------------------------------------
    * Navigating straight to /redwood/support/query (GET) returns an empty
@@ -25,42 +25,43 @@
    * persists for some other reason.
    * ---------------------------------------------------------------------*/
 
-  function ensureQueryPageRendered() {
-    const path = location.pathname.replace(/\/+$/, ''); // strip trailing slash(es)
-    if (!/\/redwood\/support\/query$/.test(path)) return false;
-    if (document.getElementById('queryEdit')) return false; // already rendered - nothing to do
-
-    const FLAG = 'rqh-auto-post-attempted';
-    let alreadyTried = false;
-    try {
-      alreadyTried = sessionStorage.getItem(FLAG) === '1';
-    } catch (e) {
-      /* sessionStorage unavailable - just attempt once, no loop guard */
-    }
-    if (alreadyTried) return false;
-
-    try {
-      sessionStorage.setItem(FLAG, '1');
-    } catch (e) {
-      /* non-fatal */
-    }
-
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = '/redwood/support/query';
-    form.style.display = 'none';
-
-    const input = document.createElement('textarea');
-    input.name = 'query';
-    input.value = '';
-    form.appendChild(input);
-
-    document.body.appendChild(form);
-    form.submit();
-    return true; // navigating away - caller should skip the rest of init
+    function ensureQueryPageRendered() {
+  const path = location.pathname.replace(/\/+$/, '');
+  if (!/\/redwood\/support\/query$/.test(path)) return false;
+  if (document.getElementById('queryEdit')) {
+    // Page rendered successfully - clear the guard so a future blank
+    // load (new navigation, not this one) is allowed to auto-post again.
+    try { sessionStorage.removeItem('rqh-auto-post-attempted'); } catch (e) {}
+    return false;
   }
 
-  /* -----------------------------------------------------------------------
+  const FLAG = 'rqh-auto-post-attempted';
+  let alreadyTried = false;
+  try {
+    alreadyTried = sessionStorage.getItem(FLAG) === '1';
+  } catch (e) {}
+  if (alreadyTried) return false;
+
+  try {
+    sessionStorage.setItem(FLAG, '1');
+  } catch (e) {}
+
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/redwood/support/query';
+  form.style.display = 'none';
+
+  const input = document.createElement('textarea');
+  input.name = 'query';
+  input.value = '';
+  form.appendChild(input);
+
+  document.body.appendChild(form);
+  form.submit();
+  return true;
+}
+
+    /* -----------------------------------------------------------------------
    * 1. TAB CONFIGURATION
    * -------------------------------------------------------------------
    * Each tab describes one "wrapper" around a complex query.
@@ -75,27 +76,27 @@
    * Add new tabs by pushing more objects into TAB_CONFIGS.
    * ---------------------------------------------------------------------*/
 
-  // Helper: turn a newline/comma separated blob into a deduped array of
-  // trimmed, non-empty strings.
-  function parseList(raw) {
-    return Array.from(
-      new Set(
-        raw
-          .split(/[\n,]/)
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0)
-      )
-    );
-  }
+    // Helper: turn a newline/comma separated blob into a deduped array of
+    // trimmed, non-empty strings.
+    function parseList(raw) {
+        return Array.from(
+            new Set(
+                raw
+                .split(/[\n,]/)
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0)
+            )
+        );
+    }
 
-  // Helper: turn an array of strings into a SQL-safe quoted IN(...) list.
-  // NOTE: naive escaping (doubles single quotes) - fine for job def names,
-  // which shouldn't contain quotes, but review before use with free text.
-  function sqlInList(values) {
-    return values.map((v) => `'${v.replace(/'/g, "''")}'`).join(', ');
-  }
+    // Helper: turn an array of strings into a SQL-safe quoted IN(...) list.
+    // NOTE: naive escaping (doubles single quotes) - fine for job def names,
+    // which shouldn't contain quotes, but review before use with free text.
+    function sqlInList(values) {
+        return values.map((v) => `'${v.replace(/'/g, "''")}'`).join(', ');
+    }
 
-  /* -----------------------------------------------------------------------
+    /* -----------------------------------------------------------------------
    * 1a. QUERY-EDIT COLLAPSE (raw SQL box)
    * -------------------------------------------------------------------
    * The raw `#queryEdit` textarea isn't needed by end users day-to-day -
@@ -108,11 +109,11 @@
    * is active (see forceOpen/releaseForce, wired up in selectTab).
    * ---------------------------------------------------------------------*/
 
-  function injectRQHCollapseStyles() {
-    if (document.getElementById('rqh-collapse-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'rqh-collapse-styles';
-    style.textContent = `
+    function injectRQHCollapseStyles() {
+        if (document.getElementById('rqh-collapse-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'rqh-collapse-styles';
+        style.textContent = `
       .rqh-query-toggle {
         cursor: pointer;
         user-select: none;
@@ -125,65 +126,65 @@
       .rqh-query-toggle:hover { text-decoration: underline; }
       .rqh-query-collapsed { display: none; }
     `;
-    document.head.appendChild(style);
-  }
-
-  // Returns a control object ({ forceOpen, releaseForce }) so callers
-  // (the tab switcher) can force the box open for tabs with no other
-  // input field, or null if the textarea was already wired up before.
-  function makeQueryEditCollapsible(textarea) {
-    if (!textarea || textarea.dataset.rqhCollapsible) return null;
-    textarea.dataset.rqhCollapsible = '1';
-
-    injectRQHCollapseStyles();
-
-    let visible = false;
-    try {
-      visible = sessionStorage.getItem('rqh-query-visible') === '1';
-    } catch (e) {
-      /* sessionStorage unavailable - default to collapsed */
+        document.head.appendChild(style);
     }
 
-    const toggle = document.createElement('div');
-    toggle.className = 'rqh-query-toggle';
-    function updateLabel() {
-      toggle.textContent = (visible ? '▼' : '▶') + ' Raw SQL query';
-    }
-    updateLabel();
+    // Returns a control object ({ forceOpen, releaseForce }) so callers
+    // (the tab switcher) can force the box open for tabs with no other
+    // input field, or null if the textarea was already wired up before.
+    function makeQueryEditCollapsible(textarea) {
+        if (!textarea || textarea.dataset.rqhCollapsible) return null;
+        textarea.dataset.rqhCollapsible = '1';
 
-    textarea.classList.toggle('rqh-query-collapsed', !visible);
-    textarea.parentNode.insertBefore(toggle, textarea);
+        injectRQHCollapseStyles();
 
-    let forced = false;
+        let visible = false;
+        try {
+            visible = sessionStorage.getItem('rqh-query-visible') === '1';
+        } catch (e) {
+            /* sessionStorage unavailable - default to collapsed */
+        }
 
-    toggle.addEventListener('click', () => {
-      if (forced) return; // ignore manual toggling while forced open (Free Query tab)
-      visible = !visible;
-      textarea.classList.toggle('rqh-query-collapsed', !visible);
-      updateLabel();
-      try {
-        sessionStorage.setItem('rqh-query-visible', visible ? '1' : '0');
-      } catch (e) {
-        /* non-fatal */
-      }
-    });
-
-    return {
-      forceOpen() {
-        forced = true;
-        textarea.classList.remove('rqh-query-collapsed');
-        toggle.style.display = 'none';
-      },
-      releaseForce() {
-        forced = false;
-        toggle.style.display = '';
-        textarea.classList.toggle('rqh-query-collapsed', !visible);
+        const toggle = document.createElement('div');
+        toggle.className = 'rqh-query-toggle';
+        function updateLabel() {
+            toggle.textContent = (visible ? '▼' : '▶') + ' Raw SQL query';
+        }
         updateLabel();
-      },
-    };
-  }
 
-  /* -----------------------------------------------------------------------
+        textarea.classList.toggle('rqh-query-collapsed', !visible);
+        textarea.parentNode.insertBefore(toggle, textarea);
+
+        let forced = false;
+
+        toggle.addEventListener('click', () => {
+            if (forced) return; // ignore manual toggling while forced open (Free Query tab)
+            visible = !visible;
+            textarea.classList.toggle('rqh-query-collapsed', !visible);
+            updateLabel();
+            try {
+                sessionStorage.setItem('rqh-query-visible', visible ? '1' : '0');
+            } catch (e) {
+                /* non-fatal */
+            }
+        });
+
+        return {
+            forceOpen() {
+                forced = true;
+                textarea.classList.remove('rqh-query-collapsed');
+                toggle.style.display = 'none';
+            },
+            releaseForce() {
+                forced = false;
+                toggle.style.display = '';
+                textarea.classList.toggle('rqh-query-collapsed', !visible);
+                updateLabel();
+            },
+        };
+    }
+
+    /* -----------------------------------------------------------------------
    * 1b. RESULT TABLE ENHANCEMENT
    * -------------------------------------------------------------------
    * Adds to the server-rendered `<table class="report-outside">` results:
@@ -194,11 +195,11 @@
    * Mirrors the interaction pattern from the RMJ CSV Viewer userscript.
    * ---------------------------------------------------------------------*/
 
-  function injectRQHTableStyles() {
-    if (document.getElementById('rqh-table-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'rqh-table-styles';
-    style.textContent = `
+    function injectRQHTableStyles() {
+        if (document.getElementById('rqh-table-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'rqh-table-styles';
+        style.textContent = `
       .rqh-report-wrap { position: relative; outline: none; }
       .rqh-report-table td.rqh-col-no, .rqh-report-table th.rqh-col-no {
         text-align: center; font-weight: 600;
@@ -236,191 +237,191 @@
       }
       .rqh-meta-toggle:hover { color: #0e2f44 !important; }
     `;
-    document.head.appendChild(style);
-  }
-
-  function showRQHToast(wrap, msg) {
-    let t = wrap.querySelector('.rqh-toast');
-    if (!t) {
-      t = document.createElement('div');
-      t.className = 'rqh-toast';
-      wrap.appendChild(t);
-    }
-    t.textContent = msg;
-    t.style.opacity = '1';
-    clearTimeout(t._rqhTid);
-    t._rqhTid = setTimeout(() => {
-      t.style.opacity = '0';
-    }, 1800);
-  }
-
-  function enhanceReportTable(table) {
-    if (!table || table.dataset.rqhEnhanced) return;
-    const thead = table.tHead;
-    const tbody = table.tBodies && table.tBodies[0];
-    if (!thead || !tbody || !thead.rows.length || !tbody.rows.length) return;
-    table.dataset.rqhEnhanced = '1';
-
-    injectRQHTableStyles();
-
-    const headerRows = Array.from(thead.rows);
-    const labelRow = headerRows[0]; // human-readable column names row
-
-    // Add a "No." cell to every header row (bump colspan on spanning rows,
-    // e.g. the trailing empty <tr><td colspan="N"></td></tr> separator row).
-    headerRows.forEach((tr) => {
-      const firstCell = tr.cells[0];
-      if (!firstCell) return;
-      if (tr.cells.length === 1 && firstCell.hasAttribute('colspan')) {
-        const span = parseInt(firstCell.getAttribute('colspan'), 10) || 1;
-        firstCell.setAttribute('colspan', String(span + 1));
-        return;
-      }
-      const cell = document.createElement(firstCell.tagName.toLowerCase());
-      cell.className = firstCell.className;
-      cell.classList.add('rqh-col-no');
-      cell.textContent = tr === labelRow ? 'No.' : '';
-      tr.insertBefore(cell, firstCell);
-    });
-    // Toggle link to show/hide the class-name/data-type metadata rows.
-    const metaToggle = document.createElement('span');
-    metaToggle.className = 'rqh-meta-toggle';
-    metaToggle.textContent = ' [+]';
-    metaToggle.title = 'Show/hide column type details';
-    metaToggle.addEventListener('click', (e) => {
-      e.stopPropagation(); // don't trigger the column copy-click on "No."
-      const showing = table.classList.toggle('rqh-show-meta');
-      metaToggle.textContent = showing ? ' [-]' : ' [+]';
-    });
-    labelRow.cells[0].appendChild(metaToggle);
-    // Add a row-number cell to every body row.
-    Array.from(tbody.rows).forEach((tr, i) => {
-      const td = document.createElement('td');
-      td.className = 'rqh-col-no';
-      td.textContent = String(i + 1);
-      tr.insertBefore(td, tr.cells[0]);
-    });
-
-    table.classList.add('rqh-report-table');
-
-    // Wrap the table in a positioned, focusable container so we have
-    // somewhere to show the copy toast and catch Ctrl+C.
-    const wrap = document.createElement('div');
-    wrap.className = 'rqh-report-wrap';
-    wrap.tabIndex = 0;
-    table.parentNode.insertBefore(wrap, table);
-    wrap.appendChild(table);
-
-    // --- Header click-to-copy (skip the "No." column itself) ---
-    Array.from(labelRow.cells).forEach((th, idx) => {
-      if (idx === 0) return;
-      th.setAttribute('data-rqh-copyable', '1');
-      th.title = 'Click to copy this column';
-      th.addEventListener('click', () => {
-        const values = Array.from(tbody.rows).map((tr) => tr.cells[idx]?.textContent ?? '');
-        navigator.clipboard.writeText(values.join('\n')).then(() => {
-          showRQHToast(wrap, `Copied ${values.length} value(s) from "${th.textContent.trim()}"`);
-        });
-      });
-    });
-
-    // --- Excel-style range selection + Ctrl+C copy ---
-    let anchor = null;
-    let selected = new Set();
-    let dragging = false;
-
-    function cellPos(td) {
-      const tr = td.parentElement;
-      const col = td.cellIndex - 1; // exclude the No. column
-      const row = Array.prototype.indexOf.call(tbody.rows, tr);
-      return col >= 0 && row >= 0 ? { row, col } : null;
-    }
-    function key(r, c) {
-      return r + ',' + c;
-    }
-    function tdAt(r, c) {
-      const tr = tbody.rows[r];
-      return tr ? tr.cells[c + 1] : null;
-    }
-    function highlight() {
-      table.querySelectorAll('td.rqh-sel').forEach((td) => td.classList.remove('rqh-sel'));
-      selected.forEach((k) => {
-        const [r, c] = k.split(',').map(Number);
-        tdAt(r, c)?.classList.add('rqh-sel');
-      });
-    }
-    function selectRect(a, b) {
-      selected.clear();
-      const r1 = Math.min(a.row, b.row);
-      const r2 = Math.max(a.row, b.row);
-      const c1 = Math.min(a.col, b.col);
-      const c2 = Math.max(a.col, b.col);
-      for (let r = r1; r <= r2; r++) {
-        for (let c = c1; c <= c2; c++) selected.add(key(r, c));
-      }
-      highlight();
+        document.head.appendChild(style);
     }
 
-    tbody.addEventListener('mousedown', (e) => {
-      const td = e.target.closest('td:not(.rqh-col-no)');
-      if (!td) return;
-      const pos = cellPos(td);
-      if (!pos) return;
-      e.preventDefault();
-      if (e.shiftKey && anchor) {
-        selectRect(anchor, pos);
-      } else if (e.ctrlKey || e.metaKey) {
-        const k = key(pos.row, pos.col);
-        if (selected.has(k)) selected.delete(k);
-        else selected.add(k);
-        highlight();
-        anchor = pos;
-      } else {
-        selected = new Set([key(pos.row, pos.col)]);
-        highlight();
-        anchor = pos;
-        dragging = true;
-      }
-      wrap.focus();
-    });
-    tbody.addEventListener('mousemove', (e) => {
-      if (!dragging) return;
-      const td = e.target.closest('td:not(.rqh-col-no)');
-      if (!td) return;
-      const pos = cellPos(td);
-      if (pos && anchor) selectRect(anchor, pos);
-    });
-    document.addEventListener('mouseup', () => {
-      dragging = false;
-    });
-
-    wrap.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selected.size) {
-        e.preventDefault();
-        const keys = Array.from(selected).map((k) => k.split(',').map(Number));
-        const minR = Math.min(...keys.map((k) => k[0]));
-        const maxR = Math.max(...keys.map((k) => k[0]));
-        const minC = Math.min(...keys.map((k) => k[1]));
-        const maxC = Math.max(...keys.map((k) => k[1]));
-        const lines = [];
-        for (let r = minR; r <= maxR; r++) {
-          const cells = [];
-          for (let c = minC; c <= maxC; c++) {
-            cells.push(selected.has(key(r, c)) ? tdAt(r, c)?.textContent ?? '' : '');
-          }
-          lines.push(cells.join('\t'));
+    function showRQHToast(wrap, msg) {
+        let t = wrap.querySelector('.rqh-toast');
+        if (!t) {
+            t = document.createElement('div');
+            t.className = 'rqh-toast';
+            wrap.appendChild(t);
         }
-        navigator.clipboard.writeText(lines.join('\n')).then(() => {
-          showRQHToast(wrap, `Copied ${selected.size} cell(s)`);
+        t.textContent = msg;
+        t.style.opacity = '1';
+        clearTimeout(t._rqhTid);
+        t._rqhTid = setTimeout(() => {
+            t.style.opacity = '0';
+        }, 1800);
+    }
+
+    function enhanceReportTable(table) {
+        if (!table || table.dataset.rqhEnhanced) return;
+        const thead = table.tHead;
+        const tbody = table.tBodies && table.tBodies[0];
+        if (!thead || !tbody || !thead.rows.length || !tbody.rows.length) return;
+        table.dataset.rqhEnhanced = '1';
+
+        injectRQHTableStyles();
+
+        const headerRows = Array.from(thead.rows);
+        const labelRow = headerRows[0]; // human-readable column names row
+
+        // Add a "No." cell to every header row (bump colspan on spanning rows,
+        // e.g. the trailing empty <tr><td colspan="N"></td></tr> separator row).
+        headerRows.forEach((tr) => {
+            const firstCell = tr.cells[0];
+            if (!firstCell) return;
+            if (tr.cells.length === 1 && firstCell.hasAttribute('colspan')) {
+                const span = parseInt(firstCell.getAttribute('colspan'), 10) || 1;
+                firstCell.setAttribute('colspan', String(span + 1));
+                return;
+            }
+            const cell = document.createElement(firstCell.tagName.toLowerCase());
+            cell.className = firstCell.className;
+            cell.classList.add('rqh-col-no');
+            cell.textContent = tr === labelRow ? 'No.' : '';
+            tr.insertBefore(cell, firstCell);
         });
-      }
-    });
-  }
-function injectRQHResizeStyles() {
-    if (document.getElementById('rqh-resize-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'rqh-resize-styles';
-    style.textContent = `
+        // Toggle link to show/hide the class-name/data-type metadata rows.
+        const metaToggle = document.createElement('span');
+        metaToggle.className = 'rqh-meta-toggle';
+        metaToggle.textContent = ' [+]';
+        metaToggle.title = 'Show/hide column type details';
+        metaToggle.addEventListener('click', (e) => {
+            e.stopPropagation(); // don't trigger the column copy-click on "No."
+            const showing = table.classList.toggle('rqh-show-meta');
+            metaToggle.textContent = showing ? ' [-]' : ' [+]';
+        });
+        labelRow.cells[0].appendChild(metaToggle);
+        // Add a row-number cell to every body row.
+        Array.from(tbody.rows).forEach((tr, i) => {
+            const td = document.createElement('td');
+            td.className = 'rqh-col-no';
+            td.textContent = String(i + 1);
+            tr.insertBefore(td, tr.cells[0]);
+        });
+
+        table.classList.add('rqh-report-table');
+
+        // Wrap the table in a positioned, focusable container so we have
+        // somewhere to show the copy toast and catch Ctrl+C.
+        const wrap = document.createElement('div');
+        wrap.className = 'rqh-report-wrap';
+        wrap.tabIndex = 0;
+        table.parentNode.insertBefore(wrap, table);
+        wrap.appendChild(table);
+
+        // --- Header click-to-copy (skip the "No." column itself) ---
+        Array.from(labelRow.cells).forEach((th, idx) => {
+            if (idx === 0) return;
+            th.setAttribute('data-rqh-copyable', '1');
+            th.title = 'Click to copy this column';
+            th.addEventListener('click', () => {
+                const values = Array.from(tbody.rows).map((tr) => tr.cells[idx]?.textContent ?? '');
+                navigator.clipboard.writeText(values.join('\n')).then(() => {
+                    showRQHToast(wrap, `Copied ${values.length} value(s) from "${th.textContent.trim()}"`);
+                });
+            });
+        });
+
+        // --- Excel-style range selection + Ctrl+C copy ---
+        let anchor = null;
+        let selected = new Set();
+        let dragging = false;
+
+        function cellPos(td) {
+            const tr = td.parentElement;
+            const col = td.cellIndex - 1; // exclude the No. column
+            const row = Array.prototype.indexOf.call(tbody.rows, tr);
+            return col >= 0 && row >= 0 ? { row, col } : null;
+        }
+        function key(r, c) {
+            return r + ',' + c;
+        }
+        function tdAt(r, c) {
+            const tr = tbody.rows[r];
+            return tr ? tr.cells[c + 1] : null;
+        }
+        function highlight() {
+            table.querySelectorAll('td.rqh-sel').forEach((td) => td.classList.remove('rqh-sel'));
+            selected.forEach((k) => {
+                const [r, c] = k.split(',').map(Number);
+                tdAt(r, c)?.classList.add('rqh-sel');
+            });
+        }
+        function selectRect(a, b) {
+            selected.clear();
+            const r1 = Math.min(a.row, b.row);
+            const r2 = Math.max(a.row, b.row);
+            const c1 = Math.min(a.col, b.col);
+            const c2 = Math.max(a.col, b.col);
+            for (let r = r1; r <= r2; r++) {
+                for (let c = c1; c <= c2; c++) selected.add(key(r, c));
+            }
+            highlight();
+        }
+
+        tbody.addEventListener('mousedown', (e) => {
+            const td = e.target.closest('td:not(.rqh-col-no)');
+            if (!td) return;
+            const pos = cellPos(td);
+            if (!pos) return;
+            e.preventDefault();
+            if (e.shiftKey && anchor) {
+                selectRect(anchor, pos);
+            } else if (e.ctrlKey || e.metaKey) {
+                const k = key(pos.row, pos.col);
+                if (selected.has(k)) selected.delete(k);
+                else selected.add(k);
+                highlight();
+                anchor = pos;
+            } else {
+                selected = new Set([key(pos.row, pos.col)]);
+                highlight();
+                anchor = pos;
+                dragging = true;
+            }
+            wrap.focus();
+        });
+        tbody.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const td = e.target.closest('td:not(.rqh-col-no)');
+            if (!td) return;
+            const pos = cellPos(td);
+            if (pos && anchor) selectRect(anchor, pos);
+        });
+        document.addEventListener('mouseup', () => {
+            dragging = false;
+        });
+
+        wrap.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selected.size) {
+                e.preventDefault();
+                const keys = Array.from(selected).map((k) => k.split(',').map(Number));
+                const minR = Math.min(...keys.map((k) => k[0]));
+                const maxR = Math.max(...keys.map((k) => k[0]));
+                const minC = Math.min(...keys.map((k) => k[1]));
+                const maxC = Math.max(...keys.map((k) => k[1]));
+                const lines = [];
+                for (let r = minR; r <= maxR; r++) {
+                    const cells = [];
+                    for (let c = minC; c <= maxC; c++) {
+                        cells.push(selected.has(key(r, c)) ? tdAt(r, c)?.textContent ?? '' : '');
+                    }
+                    lines.push(cells.join('\t'));
+                }
+                navigator.clipboard.writeText(lines.join('\n')).then(() => {
+                    showRQHToast(wrap, `Copied ${selected.size} cell(s)`);
+                });
+            }
+        });
+    }
+    function injectRQHResizeStyles() {
+        if (document.getElementById('rqh-resize-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'rqh-resize-styles';
+        style.textContent = `
       .rqh-report-table { table-layout: fixed; }
       .rqh-report-table th { position: relative; }
       .rqh-report-table td, .rqh-report-table th {
@@ -437,148 +438,148 @@ function injectRQHResizeStyles() {
         background: rgba(59, 130, 246, 0.5);
       }
     `;
-    document.head.appendChild(style);
-  }
+        document.head.appendChild(style);
+    }
 
-  // Adds a drag handle to each column header for manual resizing, and
-  // double-click-to-expand (toggles text wrapping) for that column.
-  function makeColumnsResizable(table) {
-    if (!table || table.dataset.rqhResizable) return;
-    const thead = table.tHead;
-    const tbody = table.tBodies && table.tBodies[0];
-    if (!thead || !tbody || !thead.rows.length) return;
-    table.dataset.rqhResizable = '1';
+    // Adds a drag handle to each column header for manual resizing, and
+    // double-click-to-expand (toggles text wrapping) for that column.
+    function makeColumnsResizable(table) {
+        if (!table || table.dataset.rqhResizable) return;
+        const thead = table.tHead;
+        const tbody = table.tBodies && table.tBodies[0];
+        if (!thead || !tbody || !thead.rows.length) return;
+        table.dataset.rqhResizable = '1';
 
-    injectRQHResizeStyles();
+        injectRQHResizeStyles();
 
-    const labelRow = thead.rows[0];
-    const headerCells = Array.from(labelRow.cells);
+        const labelRow = thead.rows[0];
+        const headerCells = Array.from(labelRow.cells);
 
-    // Snapshot current rendered widths into a <colgroup> so switching to
-    // table-layout: fixed doesn't jump/collapse the columns.
-    const colgroup = document.createElement('colgroup');
-    headerCells.forEach((th) => {
-      const col = document.createElement('col');
-      col.style.width = th.getBoundingClientRect().width + 'px';
-      colgroup.appendChild(col);
-    });
-    table.insertBefore(colgroup, table.firstChild);
-    const cols = Array.from(colgroup.children);
-
-    headerCells.forEach((th, idx) => {
-      if (th.classList.contains('rqh-col-no')) return; // skip row-number column
-
-      const handle = document.createElement('div');
-      handle.className = 'rqh-resize-handle';
-      th.appendChild(handle);
-
-      th.addEventListener('dblclick', (e) => {
-        if (e.target === handle) return;
-        const expand = !th.classList.contains('rqh-expanded');
-        th.classList.toggle('rqh-expanded', expand);
-        Array.from(tbody.rows).forEach((tr) => {
-          tr.cells[idx]?.classList.toggle('rqh-expanded', expand);
+        // Snapshot current rendered widths into a <colgroup> so switching to
+        // table-layout: fixed doesn't jump/collapse the columns.
+        const colgroup = document.createElement('colgroup');
+        headerCells.forEach((th) => {
+            const col = document.createElement('col');
+            col.style.width = th.getBoundingClientRect().width + 'px';
+            colgroup.appendChild(col);
         });
-      });
+        table.insertBefore(colgroup, table.firstChild);
+        const cols = Array.from(colgroup.children);
 
-      let startX = 0;
-      let startWidth = 0;
-      function onMouseMove(e) {
-        const newWidth = Math.max(40, startWidth + (e.clientX - startX));
-        cols[idx].style.width = newWidth + 'px';
-      }
-      function onMouseUp() {
-        handle.classList.remove('rqh-resizing');
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-      }
-      handle.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        startX = e.clientX;
-        startWidth = cols[idx].getBoundingClientRect().width;
-        handle.classList.add('rqh-resizing');
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-      });
-    });
-  }
+        headerCells.forEach((th, idx) => {
+            if (th.classList.contains('rqh-col-no')) return; // skip row-number column
 
-  function scanAndMakeResizable() {
-    document.querySelectorAll('table.report-outside').forEach(makeColumnsResizable);
-  }
-function csvEscape(value) {
-    const str = String(value ?? '');
-    return /[",\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
-  }
+            const handle = document.createElement('div');
+            handle.className = 'rqh-resize-handle';
+            th.appendChild(handle);
 
-  function downloadTableAsCsv(table) {
-    const thead = table.tHead;
-    const tbody = table.tBodies && table.tBodies[0];
-    if (!thead || !tbody) return;
+            th.addEventListener('dblclick', (e) => {
+                if (e.target === handle) return;
+                const expand = !th.classList.contains('rqh-expanded');
+                th.classList.toggle('rqh-expanded', expand);
+                Array.from(tbody.rows).forEach((tr) => {
+                    tr.cells[idx]?.classList.toggle('rqh-expanded', expand);
+                });
+            });
 
-    const labelRow = thead.rows[0];
-    const headers = Array.from(labelRow.cells)
-      .filter((c) => !c.classList.contains('rqh-col-no'))
-      .map((c) => c.textContent.trim());
+            let startX = 0;
+            let startWidth = 0;
+            function onMouseMove(e) {
+                const newWidth = Math.max(40, startWidth + (e.clientX - startX));
+                cols[idx].style.width = newWidth + 'px';
+            }
+            function onMouseUp() {
+                handle.classList.remove('rqh-resizing');
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+            handle.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                startX = e.clientX;
+                startWidth = cols[idx].getBoundingClientRect().width;
+                handle.classList.add('rqh-resizing');
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        });
+    }
 
-    const lines = [headers.map(csvEscape).join(',')];
-    Array.from(tbody.rows).forEach((tr) => {
-      const cells = Array.from(tr.cells).filter((c) => !c.classList.contains('rqh-col-no'));
-      lines.push(cells.map((c) => csvEscape(c.textContent.trim())).join(','));
-    });
+    function scanAndMakeResizable() {
+        document.querySelectorAll('table.report-outside').forEach(makeColumnsResizable);
+    }
+    function csvEscape(value) {
+        const str = String(value ?? '');
+        return /[",\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
+    }
 
-    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'query_result.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
+    function downloadTableAsCsv(table) {
+        const thead = table.tHead;
+        const tbody = table.tBodies && table.tBodies[0];
+        if (!thead || !tbody) return;
 
-  // Finds each server-rendered "Download" link (href contains download=true)
-  // and adds a sibling "Download CSV" link that exports the associated
-  // report table client-side.
-  function addCsvDownloadLinks() {
-    document.querySelectorAll('a[href*="download=true"]').forEach((link) => {
-      if (link.dataset.rqhCsvAdded) return;
-      link.dataset.rqhCsvAdded = '1';
+        const labelRow = thead.rows[0];
+        const headers = Array.from(labelRow.cells)
+        .filter((c) => !c.classList.contains('rqh-col-no'))
+        .map((c) => c.textContent.trim());
 
-      let table = null;
-      let node = link.closest('h3') || link;
-      while (node && !table) {
-        node = node.nextElementSibling;
-        if (!node) break;
-        table = node.matches && node.matches('table.report-outside')
-          ? node
-          : node.querySelector && node.querySelector('table.report-outside');
-      }
-      if (!table) return;
+        const lines = [headers.map(csvEscape).join(',')];
+        Array.from(tbody.rows).forEach((tr) => {
+            const cells = Array.from(tr.cells).filter((c) => !c.classList.contains('rqh-col-no'));
+            lines.push(cells.map((c) => csvEscape(c.textContent.trim())).join(','));
+        });
 
-      const csvLink = document.createElement('a');
-      csvLink.href = '#';
-      csvLink.textContent = 'Download CSV';
-      csvLink.style.fontSize = '15px';
-      csvLink.style.marginLeft = '10px';
-      csvLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        downloadTableAsCsv(table);
-      });
-      link.parentNode.insertBefore(csvLink, link.nextSibling);
-    });
-  }
+        const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'query_result.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
 
-  function scanAndAddCsvLinks() {
-    addCsvDownloadLinks();
-  }
-  function scanAndEnhanceReportTables() {
-    document.querySelectorAll('table.report-outside').forEach(enhanceReportTable);
-  }
+    // Finds each server-rendered "Download" link (href contains download=true)
+    // and adds a sibling "Download CSV" link that exports the associated
+    // report table client-side.
+    function addCsvDownloadLinks() {
+        document.querySelectorAll('a[href*="download=true"]').forEach((link) => {
+            if (link.dataset.rqhCsvAdded) return;
+            link.dataset.rqhCsvAdded = '1';
 
-  /* -----------------------------------------------------------------------
+            let table = null;
+            let node = link.closest('h3') || link;
+            while (node && !table) {
+                node = node.nextElementSibling;
+                if (!node) break;
+                table = node.matches && node.matches('table.report-outside')
+                    ? node
+                : node.querySelector && node.querySelector('table.report-outside');
+            }
+            if (!table) return;
+
+            const csvLink = document.createElement('a');
+            csvLink.href = '#';
+            csvLink.textContent = 'Download CSV';
+            csvLink.style.fontSize = '15px';
+            csvLink.style.marginLeft = '10px';
+            csvLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                downloadTableAsCsv(table);
+            });
+            link.parentNode.insertBefore(csvLink, link.nextSibling);
+        });
+    }
+
+    function scanAndAddCsvLinks() {
+        addCsvDownloadLinks();
+    }
+    function scanAndEnhanceReportTables() {
+        document.querySelectorAll('table.report-outside').forEach(enhanceReportTable);
+    }
+
+    /* -----------------------------------------------------------------------
    * 1c. QUERY META CLEANUP
    * -------------------------------------------------------------------
    * Collapses the verbose "Query Runtime" / "Query Row Count" heading +
@@ -586,11 +587,11 @@ function csvEscape(value) {
    * small, unobtrusive summary line, e.g. "1572 ms · 7 rows".
    * ---------------------------------------------------------------------*/
 
-  function injectRQHMetaStyles() {
-    if (document.getElementById('rqh-meta-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'rqh-meta-styles';
-    style.textContent = `
+    function injectRQHMetaStyles() {
+        if (document.getElementById('rqh-meta-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'rqh-meta-styles';
+        style.textContent = `
       .rqh-query-meta {
         font-family: verdana, sans-serif;
         font-size: 11px;
@@ -598,13 +599,13 @@ function csvEscape(value) {
         margin: 4px 0 8px 0;
       }
     `;
-    document.head.appendChild(style);
-  }
+        document.head.appendChild(style);
+    }
     function injectRQHToggleStyles() {
-    if (document.getElementById('rqh-toggle-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'rqh-toggle-styles';
-    style.textContent = `
+        if (document.getElementById('rqh-toggle-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'rqh-toggle-styles';
+        style.textContent = `
       .rqh-toggle {
         position: relative;
         display: grid;
@@ -640,9 +641,33 @@ function csvEscape(value) {
       }
       .rqh-toggle-option.active { color: #fff; }
     `;
-    document.head.appendChild(style);
-  }
-/* -----------------------------------------------------------------------
+        document.head.appendChild(style);
+    }
+
+    function injectRQHCheckboxStyles() {
+        if (document.getElementById('rqh-checkbox-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'rqh-checkbox-styles';
+        style.textContent = `
+      .rqh-checkbox-group {
+        display: flex;
+        gap: 14px;
+        margin: 8px 0;
+        font-family: verdana, sans-serif;
+        font-size: 12px;
+      }
+      .rqh-checkbox-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .rqh-checkbox-option input { cursor: pointer; }
+    `;
+        document.head.appendChild(style);
+    }
+    /* -----------------------------------------------------------------------
  * 1d. JSON TAG VALUE PARSING
  * -------------------------------------------------------------------
  * If the result table has a "FullTagValue" column containing JSON like
@@ -650,67 +675,67 @@ function csvEscape(value) {
  * "UC4Name" column right after it, pulling out just the `name` field.
  * ---------------------------------------------------------------------*/
 
-function parseUc4NameColumn(table) {
-  if (!table || table.dataset.rqhJsonParsed) return;
-  const thead = table.tHead;
-  const tbody = table.tBodies && table.tBodies[0];
-  if (!thead || !tbody || !thead.rows.length) return;
+    function parseUc4NameColumn(table) {
+        if (!table || table.dataset.rqhJsonParsed) return;
+        const thead = table.tHead;
+        const tbody = table.tBodies && table.tBodies[0];
+        if (!thead || !tbody || !thead.rows.length) return;
 
-  const labelRow = thead.rows[0];
-  const headers = Array.from(labelRow.cells).map((c) => c.textContent.trim());
-  const tagColIdx = headers.indexOf('FullTagValue');
-  if (tagColIdx === -1) return; // not this kind of result set
+        const labelRow = thead.rows[0];
+        const headers = Array.from(labelRow.cells).map((c) => c.textContent.trim());
+        const tagColIdx = headers.indexOf('FullTagValue');
+        if (tagColIdx === -1) return; // not this kind of result set
 
-  table.dataset.rqhJsonParsed = '1';
+        table.dataset.rqhJsonParsed = '1';
 
-  // Insert a new header cell right after FullTagValue on every header row.
-  Array.from(thead.rows).forEach((tr) => {
-    if (tr.cells.length === 1 && tr.cells[0].hasAttribute('colspan')) {
-      const cell = tr.cells[0];
-      const span = parseInt(cell.getAttribute('colspan'), 10) || 1;
-      cell.setAttribute('colspan', String(span + 1));
-      return;
+        // Insert a new header cell right after FullTagValue on every header row.
+        Array.from(thead.rows).forEach((tr) => {
+            if (tr.cells.length === 1 && tr.cells[0].hasAttribute('colspan')) {
+                const cell = tr.cells[0];
+                const span = parseInt(cell.getAttribute('colspan'), 10) || 1;
+                cell.setAttribute('colspan', String(span + 1));
+                return;
+            }
+            const refCell = tr.cells[tagColIdx];
+            if (!refCell) return;
+            const newCell = document.createElement(refCell.tagName.toLowerCase());
+            newCell.className = refCell.className;
+            newCell.textContent = tr === labelRow ? 'UC4Name' : '';
+            if (refCell.nextSibling) {
+                tr.insertBefore(newCell, refCell.nextSibling);
+            } else {
+                tr.appendChild(newCell);
+            }
+        });
+
+        // Insert the parsed value into every body row.
+        // Tag format: "Package, System, Client, UC4Name" (comma-separated,
+        // UC4 name is always the LAST segment - mirrors Java's splitUC4Tag()).
+        Array.from(tbody.rows).forEach((tr) => {
+            const tagCell = tr.cells[tagColIdx];
+            if (!tagCell) return;
+
+            let uc4Name = '';
+            const raw = tagCell.textContent.trim();
+            if (raw) {
+                const parts = raw.split(',').map((s) => s.trim());
+                uc4Name = parts[parts.length - 1] || '';
+            }
+
+            const newCell = document.createElement('td');
+            newCell.textContent = uc4Name || '(unparsed)';
+            if (tagCell.nextSibling) {
+                tr.insertBefore(newCell, tagCell.nextSibling);
+            } else {
+                tr.appendChild(newCell);
+            }
+        });
     }
-    const refCell = tr.cells[tagColIdx];
-    if (!refCell) return;
-    const newCell = document.createElement(refCell.tagName.toLowerCase());
-    newCell.className = refCell.className;
-    newCell.textContent = tr === labelRow ? 'UC4Name' : '';
-    if (refCell.nextSibling) {
-      tr.insertBefore(newCell, refCell.nextSibling);
-    } else {
-      tr.appendChild(newCell);
-    }
-  });
-
-  // Insert the parsed value into every body row.
-  // Tag format: "Package, System, Client, UC4Name" (comma-separated,
-  // UC4 name is always the LAST segment - mirrors Java's splitUC4Tag()).
-  Array.from(tbody.rows).forEach((tr) => {
-    const tagCell = tr.cells[tagColIdx];
-    if (!tagCell) return;
-
-    let uc4Name = '';
-    const raw = tagCell.textContent.trim();
-    if (raw) {
-      const parts = raw.split(',').map((s) => s.trim());
-      uc4Name = parts[parts.length - 1] || '';
+    function scanAndParseUc4Names() {
+        document.querySelectorAll('table.report-outside').forEach(parseUc4NameColumn);
     }
 
-    const newCell = document.createElement('td');
-    newCell.textContent = uc4Name || '(unparsed)';
-    if (tagCell.nextSibling) {
-      tr.insertBefore(newCell, tagCell.nextSibling);
-    } else {
-      tr.appendChild(newCell);
-    }
-  });
-}
-function scanAndParseUc4Names() {
-  document.querySelectorAll('table.report-outside').forEach(parseUc4NameColumn);
-}
-
-/* -----------------------------------------------------------------------
+    /* -----------------------------------------------------------------------
  * 1e. WORKFLOW GRAPH VIEW (List Steps results)
  * -------------------------------------------------------------------
  * "List Steps" returns rows of (PartitionName, ChainName, SequenceNumber,
@@ -727,11 +752,113 @@ function scanAndParseUc4Names() {
  * never misfires on other tabs' result tables.
  * ---------------------------------------------------------------------*/
 
-function injectRQHGraphStyles() {
-  if (document.getElementById('rqh-graph-styles')) return;
-  const style = document.createElement('style');
-  style.id = 'rqh-graph-styles';
-  style.textContent = `
+    function injectRQHFilterStyles() {
+        if (document.getElementById('rqh-filter-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'rqh-filter-styles';
+        style.textContent = `
+    .rqh-filter-bar { margin: 6px 0; }
+    .rqh-filter-toggle-btn {
+      font-family: verdana, sans-serif; font-size: 12px;
+      padding: 4px 10px; cursor: pointer;
+      border: 1px solid #999; background: #e0e0e0; border-radius: 3px;
+    }
+    .rqh-filter-toggle-btn:hover { background: #d0d0d0; }
+    .rqh-filter-input-wrap {
+      display: flex; align-items: center; gap: 8px; margin-top: 6px;
+    }
+    .rqh-filter-input {
+      font-family: verdana, sans-serif; font-size: 12px;
+      padding: 4px 8px; border: 1px solid #999; border-radius: 3px;
+      min-width: 240px;
+    }
+    .rqh-filter-count {
+      font-family: verdana, sans-serif; font-size: 11px; color: #666;
+      white-space: nowrap;
+    }
+  `;
+        document.head.appendChild(style);
+    }
+
+    // Adds a "Filter rows" toggle button + text input above a report table.
+    // Typing filters tbody rows to those whose combined text (across all
+    // columns, including the injected "No." column) contains the query,
+    // case-insensitively. Purely client-side - doesn't touch the underlying
+    // query - so it works the same on every tab's results, not just Search
+    // Content, and composes fine with the resize/CSV/graph features below.
+    function addResultFilter(table) {
+        if (!table || table.dataset.rqhFilterAdded) return;
+        const tbody = table.tBodies && table.tBodies[0];
+        if (!tbody || !tbody.rows.length) return;
+        table.dataset.rqhFilterAdded = '1';
+
+        injectRQHFilterStyles();
+
+        const anchor = table.closest('.rqh-report-wrap') || table;
+
+        const bar = document.createElement('div');
+        bar.className = 'rqh-filter-bar';
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'rqh-filter-toggle-btn';
+        btn.textContent = '🔍 Filter rows';
+
+        const inputWrap = document.createElement('div');
+        inputWrap.className = 'rqh-filter-input-wrap';
+        inputWrap.style.display = 'none';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'Filter visible rows (matches any column)…';
+        input.className = 'rqh-filter-input';
+
+        const countLabel = document.createElement('span');
+        countLabel.className = 'rqh-filter-count';
+
+        inputWrap.appendChild(input);
+        inputWrap.appendChild(countLabel);
+
+        const totalRows = tbody.rows.length;
+        function updateCount(shown) {
+            countLabel.textContent = shown === totalRows ? `${totalRows} row(s)` : `${shown} of ${totalRows} row(s)`;
+        }
+        updateCount(totalRows);
+
+        function applyFilter() {
+            const q = input.value.trim().toLowerCase();
+            let shown = 0;
+            Array.from(tbody.rows).forEach((tr) => {
+                const match = !q || tr.textContent.toLowerCase().includes(q);
+                tr.style.display = match ? '' : 'none';
+                if (match) shown++;
+            });
+            updateCount(shown);
+        }
+        input.addEventListener('input', applyFilter);
+
+        btn.addEventListener('click', () => {
+            const showing = inputWrap.style.display !== 'none';
+            inputWrap.style.display = showing ? 'none' : 'flex';
+            btn.textContent = showing ? '🔍 Filter rows' : '🔼 Hide filter';
+            if (!showing) input.focus();
+        });
+
+        bar.appendChild(btn);
+        bar.appendChild(inputWrap);
+
+        anchor.parentNode.insertBefore(bar, anchor);
+    }
+
+    function scanAndAddResultFilters() {
+        document.querySelectorAll('table.report-outside').forEach(addResultFilter);
+    }
+
+    function injectRQHGraphStyles() {
+        if (document.getElementById('rqh-graph-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'rqh-graph-styles';
+        style.textContent = `
     .rqh-graph-toggle-btn {
       font-family: verdana, sans-serif; font-size: 12px;
       padding: 4px 10px; margin: 6px 0; cursor: pointer;
@@ -748,291 +875,298 @@ function injectRQHGraphStyles() {
     }
     .rqh-graph-chain-title:first-child { margin-top: 0; }
   `;
-  document.head.appendChild(style);
-}
+        document.head.appendChild(style);
+    }
 
-// Reads a "List Steps" result table into [{ partition, chain, steps: [{seq, name}] }],
-// grouped by (PartitionName, ChainName) and sorted by SequenceNumber.
-// Column order (ignoring the injected "No." column) is fixed by the
-// 'list-steps' SQL: PartitionName, ChainName, SequenceNumber, StepName.
-function extractChainSteps(table) {
-  const thead = table.tHead;
-  const tbody = table.tBodies && table.tBodies[0];
-  if (!thead || !tbody || !thead.rows.length) return [];
+    // Reads a "List Steps" result table into [{ partition, chain, steps: [{seq, name}] }],
+    // grouped by (PartitionName, ChainName) and sorted by SequenceNumber.
+    // Column order (ignoring the injected "No." column) is fixed by the
+    // 'list-steps' SQL: PartitionName, ChainName, SequenceNumber, StepName.
+    function extractChainSteps(table) {
+        const thead = table.tHead;
+        const tbody = table.tBodies && table.tBodies[0];
+        if (!thead || !tbody || !thead.rows.length) return [];
 
-  const labelRow = thead.rows[0];
-  const dataHeaderCells = Array.from(labelRow.cells).filter((c) => !c.classList.contains('rqh-col-no'));
-  if (dataHeaderCells.length < 4) return [];
+        const labelRow = thead.rows[0];
+        const dataHeaderCells = Array.from(labelRow.cells).filter((c) => !c.classList.contains('rqh-col-no'));
+        if (dataHeaderCells.length < 4) return [];
 
-  const groups = new Map(); // key: partition + "\u0000" + chain -> { partition, chain, steps }
-  Array.from(tbody.rows).forEach((tr) => {
-    const cells = Array.from(tr.cells).filter((c) => !c.classList.contains('rqh-col-no'));
-    if (cells.length < 4) return;
-    const partition = cells[0].textContent.trim();
-    const chain = cells[1].textContent.trim();
-    const seq = parseInt(cells[2].textContent.trim(), 10);
-    const step = cells[3].textContent.trim();
-    const key = partition + '\u0000' + chain;
-    if (!groups.has(key)) groups.set(key, { partition, chain, steps: [] });
-    groups.get(key).steps.push({ seq: isNaN(seq) ? 0 : seq, name: step });
-  });
+        const groups = new Map(); // key: partition + "\u0000" + chain -> { partition, chain, steps }
+        Array.from(tbody.rows).forEach((tr) => {
+            const cells = Array.from(tr.cells).filter((c) => !c.classList.contains('rqh-col-no'));
+            if (cells.length < 4) return;
+            const partition = cells[0].textContent.trim();
+            const chain = cells[1].textContent.trim();
+            const seq = parseInt(cells[2].textContent.trim(), 10);
+            const step = cells[3].textContent.trim();
+            const key = partition + '\u0000' + chain;
+            if (!groups.has(key)) groups.set(key, { partition, chain, steps: [] });
+            groups.get(key).steps.push({ seq: isNaN(seq) ? 0 : seq, name: step });
+        });
 
-  const result = Array.from(groups.values());
-  result.forEach((g) => g.steps.sort((a, b) => a.seq - b.seq));
-  return result;
-}
+        const result = Array.from(groups.values());
+        result.forEach((g) => g.steps.sort((a, b) => a.seq - b.seq));
+        return result;
+    }
 
-// Renders one chain as an SVG node graph. Steps sharing the same
-// SequenceNumber run in parallel in RMJ/UC4, so they're grouped into one
-// COLUMN (stacked vertically) rather than placed one after another;
-// distinct sequence numbers become successive columns left-to-right.
-// Arrows fan from every node in a column to every node in the next column,
-// since (absent explicit branch/condition data) each step in a column
-// depends on the whole previous column completing.
-function buildChainSvg(chain) {
-  const NODE_W = 160, NODE_H = 44, GAP_X = 70, GAP_Y = 16, PAD = 12;
-  const SVG_NS = 'http://www.w3.org/2000/svg';
+    // Renders one chain as an SVG node graph. Steps sharing the same
+    // SequenceNumber run in parallel in RMJ/UC4, so they're grouped into one
+    // COLUMN (stacked vertically) rather than placed one after another;
+    // distinct sequence numbers become successive columns left-to-right.
+    // Arrows fan from every node in a column to every node in the next column,
+    // since (absent explicit branch/condition data) each step in a column
+    // depends on the whole previous column completing.
+    function buildChainSvg(chain) {
+        const NODE_W = 160, NODE_H = 44, GAP_X = 70, GAP_Y = 16, PAD = 12;
+        const SVG_NS = 'http://www.w3.org/2000/svg';
 
-  // Group steps by SequenceNumber, preserving ascending seq order. Steps
-  // within a column keep their original (stable-sorted) relative order.
-  const bySeq = new Map();
-  chain.steps.forEach((step) => {
-    if (!bySeq.has(step.seq)) bySeq.set(step.seq, []);
-    bySeq.get(step.seq).push(step);
-  });
-  const columns = Array.from(bySeq.keys())
-    .sort((a, b) => a - b)
-    .map((seq) => ({ seq, steps: bySeq.get(seq) }));
+        // Group steps by SequenceNumber, preserving ascending seq order. Steps
+        // within a column keep their original (stable-sorted) relative order.
+        const bySeq = new Map();
+        chain.steps.forEach((step) => {
+            if (!bySeq.has(step.seq)) bySeq.set(step.seq, []);
+            bySeq.get(step.seq).push(step);
+        });
+        const columns = Array.from(bySeq.keys())
+        .sort((a, b) => a - b)
+        .map((seq) => ({ seq, steps: bySeq.get(seq) }));
 
-  const maxRows = Math.max(1, ...columns.map((c) => c.steps.length));
-  const width = PAD * 2 + columns.length * (NODE_W + GAP_X) - GAP_X;
-  const height = PAD * 2 + maxRows * (NODE_H + GAP_Y) - GAP_Y;
+        const maxRows = Math.max(1, ...columns.map((c) => c.steps.length));
+        const width = PAD * 2 + columns.length * (NODE_W + GAP_X) - GAP_X;
+        const height = PAD * 2 + maxRows * (NODE_H + GAP_Y) - GAP_Y;
 
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', `0 0 ${Math.max(width, 200)} ${Math.max(height, NODE_H + PAD * 2)}`);
-  svg.setAttribute('width', Math.max(width, 200));
-  svg.setAttribute('height', Math.max(height, NODE_H + PAD * 2));
-  svg.style.display = 'block';
-  svg.style.marginBottom = '6px';
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('viewBox', `0 0 ${Math.max(width, 200)} ${Math.max(height, NODE_H + PAD * 2)}`);
+        svg.setAttribute('width', Math.max(width, 200));
+        svg.setAttribute('height', Math.max(height, NODE_H + PAD * 2));
+        svg.style.display = 'block';
+        svg.style.marginBottom = '6px';
 
-  const defs = document.createElementNS(SVG_NS, 'defs');
-  const marker = document.createElementNS(SVG_NS, 'marker');
-  marker.setAttribute('id', 'rqh-arrow-' + Math.random().toString(36).slice(2));
-  marker.setAttribute('markerWidth', '8');
-  marker.setAttribute('markerHeight', '8');
-  marker.setAttribute('refX', '7');
-  marker.setAttribute('refY', '4');
-  marker.setAttribute('orient', 'auto');
-  const arrowPath = document.createElementNS(SVG_NS, 'path');
-  arrowPath.setAttribute('d', 'M0,0 L8,4 L0,8 Z');
-  arrowPath.setAttribute('fill', '#6598CB');
-  marker.appendChild(arrowPath);
-  defs.appendChild(marker);
-  svg.appendChild(defs);
-  const arrowMarkerUrl = `url(#${marker.id})`;
+        const defs = document.createElementNS(SVG_NS, 'defs');
+        const marker = document.createElementNS(SVG_NS, 'marker');
+        marker.setAttribute('id', 'rqh-arrow-' + Math.random().toString(36).slice(2));
+        marker.setAttribute('markerWidth', '8');
+        marker.setAttribute('markerHeight', '8');
+        marker.setAttribute('refX', '7');
+        marker.setAttribute('refY', '4');
+        marker.setAttribute('orient', 'auto');
+        const arrowPath = document.createElementNS(SVG_NS, 'path');
+        arrowPath.setAttribute('d', 'M0,0 L8,4 L0,8 Z');
+        arrowPath.setAttribute('fill', '#6598CB');
+        marker.appendChild(arrowPath);
+        defs.appendChild(marker);
+        svg.appendChild(defs);
+        const arrowMarkerUrl = `url(#${marker.id})`;
 
-  // Precompute each column's x and each node's y (vertically centered
-  // within the column when it has fewer nodes than the tallest column).
-  const innerHeight = height - PAD * 2;
-  columns.forEach((col, ci) => {
-    col.x = PAD + ci * (NODE_W + GAP_X);
-    const colHeight = col.steps.length * (NODE_H + GAP_Y) - GAP_Y;
-    const yStart = PAD + (innerHeight - colHeight) / 2;
-    col.ys = col.steps.map((_, ri) => yStart + ri * (NODE_H + GAP_Y));
-  });
+        // Precompute each column's x and each node's y (vertically centered
+        // within the column when it has fewer nodes than the tallest column).
+        const innerHeight = height - PAD * 2;
+        columns.forEach((col, ci) => {
+            col.x = PAD + ci * (NODE_W + GAP_X);
+            const colHeight = col.steps.length * (NODE_H + GAP_Y) - GAP_Y;
+            const yStart = PAD + (innerHeight - colHeight) / 2;
+            col.ys = col.steps.map((_, ri) => yStart + ri * (NODE_H + GAP_Y));
+        });
 
-  // Fan arrows from every node in column i-1 to every node in column i.
-  for (let ci = 1; ci < columns.length; ci++) {
-    const prev = columns[ci - 1];
-    const cur = columns[ci];
-    prev.ys.forEach((py) => {
-      const px = prev.x + NODE_W;
-      const pcy = py + NODE_H / 2;
-      cur.ys.forEach((cy) => {
-        const cx = cur.x;
-        const ccy = cy + NODE_H / 2;
-        if (pcy === ccy) {
-          const line = document.createElementNS(SVG_NS, 'line');
-          line.setAttribute('x1', px); line.setAttribute('y1', pcy);
-          line.setAttribute('x2', cx); line.setAttribute('y2', ccy);
-          line.setAttribute('stroke', '#6598CB'); line.setAttribute('stroke-width', '1.5');
-          line.setAttribute('marker-end', arrowMarkerUrl);
-          svg.appendChild(line);
-        } else {
-          // Gentle curve so fan-out/fan-in lines between parallel nodes
-          // don't overlap straight through other boxes.
-          const midX = (px + cx) / 2;
-          const path = document.createElementNS(SVG_NS, 'path');
-          path.setAttribute('d', `M${px},${pcy} C${midX},${pcy} ${midX},${ccy} ${cx},${ccy}`);
-          path.setAttribute('stroke', '#6598CB'); path.setAttribute('stroke-width', '1.5'); path.setAttribute('fill', 'none');
-          path.setAttribute('marker-end', arrowMarkerUrl);
-          svg.appendChild(path);
+        // Fan arrows from every node in column i-1 to every node in column i.
+        for (let ci = 1; ci < columns.length; ci++) {
+            const prev = columns[ci - 1];
+            const cur = columns[ci];
+            prev.ys.forEach((py) => {
+                const px = prev.x + NODE_W;
+                const pcy = py + NODE_H / 2;
+                cur.ys.forEach((cy) => {
+                    const cx = cur.x;
+                    const ccy = cy + NODE_H / 2;
+                    if (pcy === ccy) {
+                        const line = document.createElementNS(SVG_NS, 'line');
+                        line.setAttribute('x1', px); line.setAttribute('y1', pcy);
+                        line.setAttribute('x2', cx); line.setAttribute('y2', ccy);
+                        line.setAttribute('stroke', '#6598CB'); line.setAttribute('stroke-width', '1.5');
+                        line.setAttribute('marker-end', arrowMarkerUrl);
+                        svg.appendChild(line);
+                    } else {
+                        // Gentle curve so fan-out/fan-in lines between parallel nodes
+                        // don't overlap straight through other boxes.
+                        const midX = (px + cx) / 2;
+                        const path = document.createElementNS(SVG_NS, 'path');
+                        path.setAttribute('d', `M${px},${pcy} C${midX},${pcy} ${midX},${ccy} ${cx},${ccy}`);
+                        path.setAttribute('stroke', '#6598CB'); path.setAttribute('stroke-width', '1.5'); path.setAttribute('fill', 'none');
+                        path.setAttribute('marker-end', arrowMarkerUrl);
+                        svg.appendChild(path);
+                    }
+                });
+            });
         }
-      });
-    });
-  }
 
-  // Draw nodes on top of the arrows.
-  columns.forEach((col) => {
-    col.steps.forEach((step, ri) => {
-      const x = col.x;
-      const y = col.ys[ri];
+        // Draw nodes on top of the arrows.
+        columns.forEach((col) => {
+            col.steps.forEach((step, ri) => {
+                const x = col.x;
+                const y = col.ys[ri];
 
-      const rect = document.createElementNS(SVG_NS, 'rect');
-      rect.setAttribute('x', x); rect.setAttribute('y', y);
-      rect.setAttribute('width', NODE_W); rect.setAttribute('height', NODE_H);
-      rect.setAttribute('rx', 6);
-      rect.setAttribute('fill', '#eaf2fb'); rect.setAttribute('stroke', '#6598CB'); rect.setAttribute('stroke-width', '1.5');
-      svg.appendChild(rect);
+                const rect = document.createElementNS(SVG_NS, 'rect');
+                rect.setAttribute('x', x); rect.setAttribute('y', y);
+                rect.setAttribute('width', NODE_W); rect.setAttribute('height', NODE_H);
+                rect.setAttribute('rx', 6);
+                rect.setAttribute('fill', '#eaf2fb'); rect.setAttribute('stroke', '#6598CB'); rect.setAttribute('stroke-width', '1.5');
+                svg.appendChild(rect);
 
-      const badge = document.createElementNS(SVG_NS, 'text');
-      badge.setAttribute('x', x + 6); badge.setAttribute('y', y + 13);
-      badge.setAttribute('font-size', '9'); badge.setAttribute('fill', '#6598CB');
-      badge.setAttribute('font-family', 'verdana, sans-serif'); badge.setAttribute('font-weight', 'bold');
-      badge.textContent = `#${step.seq}`;
-      svg.appendChild(badge);
+                const badge = document.createElementNS(SVG_NS, 'text');
+                badge.setAttribute('x', x + 6); badge.setAttribute('y', y + 13);
+                badge.setAttribute('font-size', '9'); badge.setAttribute('fill', '#6598CB');
+                badge.setAttribute('font-family', 'verdana, sans-serif'); badge.setAttribute('font-weight', 'bold');
+                badge.textContent = `#${step.seq}`;
+                svg.appendChild(badge);
 
-      const label = document.createElementNS(SVG_NS, 'text');
-      label.setAttribute('x', x + NODE_W / 2); label.setAttribute('y', y + NODE_H / 2 + 9);
-      label.setAttribute('text-anchor', 'middle'); label.setAttribute('font-size', '10.5');
-      label.setAttribute('font-family', 'verdana, sans-serif'); label.setAttribute('fill', '#0e2f44');
-      const maxChars = 24;
-      label.textContent = step.name.length > maxChars ? step.name.slice(0, maxChars - 1) + '…' : step.name;
-      const titleEl = document.createElementNS(SVG_NS, 'title');
-      titleEl.textContent = step.name;
-      label.appendChild(titleEl);
-      svg.appendChild(label);
-    });
-  });
+                const label = document.createElementNS(SVG_NS, 'text');
+                label.setAttribute('x', x + NODE_W / 2); label.setAttribute('y', y + NODE_H / 2 + 9);
+                label.setAttribute('text-anchor', 'middle'); label.setAttribute('font-size', '10.5');
+                label.setAttribute('font-family', 'verdana, sans-serif'); label.setAttribute('fill', '#0e2f44');
+                const maxChars = 24;
+                label.textContent = step.name.length > maxChars ? step.name.slice(0, maxChars - 1) + '…' : step.name;
+                const titleEl = document.createElementNS(SVG_NS, 'title');
+                titleEl.textContent = step.name;
+                label.appendChild(titleEl);
+                svg.appendChild(label);
+            });
+        });
 
-  return svg;
-}
-
-function addWorkflowGraphView(table) {
-  if (!table || table.dataset.rqhGraphAdded) return;
-
-  let activeTabId = null;
-  try {
-    const saved = sessionStorage.getItem('rqh-active-tab');
-    if (saved) activeTabId = JSON.parse(saved).id;
-  } catch (e) {
-    /* ignore malformed/unavailable storage */
-  }
-  if (activeTabId !== 'list-steps') return;
-
-  const chains = extractChainSteps(table);
-  if (!chains.length) return;
-
-  table.dataset.rqhGraphAdded = '1';
-  injectRQHGraphStyles();
-
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'rqh-graph-toggle-btn';
-  btn.textContent = '🔀 Show as workflow diagram';
-
-  const panel = document.createElement('div');
-  panel.className = 'rqh-graph-panel';
-
-  let built = false;
-  btn.addEventListener('click', () => {
-    const showing = panel.style.display === 'block';
-    if (!showing && !built) {
-      chains.forEach((chain) => {
-        const title = document.createElement('div');
-        title.className = 'rqh-graph-chain-title';
-        title.textContent = `${chain.chain} (${chain.partition}) — ${chain.steps.length} step(s)`;
-        panel.appendChild(title);
-        panel.appendChild(buildChainSvg(chain));
-      });
-      built = true;
+        return svg;
     }
-    panel.style.display = showing ? 'none' : 'block';
-    btn.textContent = showing ? '🔀 Show as workflow diagram' : '🔼 Hide workflow diagram';
-  });
 
-  const anchor = table.closest('.rqh-report-wrap') || table;
-  anchor.parentNode.insertBefore(btn, anchor);
-  anchor.parentNode.insertBefore(panel, anchor);
-}
+    function addWorkflowGraphView(table) {
+        if (!table || table.dataset.rqhGraphAdded) return;
 
-function scanAndAddGraphViews() {
-  document.querySelectorAll('table.report-outside').forEach(addWorkflowGraphView);
-}
+        let activeTabId = null;
+        try {
+            const saved = sessionStorage.getItem('rqh-active-tab');
+            if (saved) activeTabId = JSON.parse(saved).id;
+        } catch (e) {
+            /* ignore malformed/unavailable storage */
+        }
+        if (activeTabId !== 'list-steps') return;
 
-  // Collects an <h3>...</h3><textarea>...</textarea>[<hr>] block: the text
-  // inside the textarea, plus every node from the h3 through the trailing
-  // <hr> (inclusive) so the whole thing can be removed afterward.
-  function collectMetaBlock(h3) {
-    const nodes = [h3];
-    let text = '';
-    let node = h3.nextSibling;
-    while (node) {
-      const next = node.nextSibling;
-      if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'TEXTAREA') {
-        text = (node.value || node.textContent || '').trim();
-        nodes.push(node);
-      } else if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'HR') {
-        nodes.push(node);
+        const chains = extractChainSteps(table);
+        if (!chains.length) return;
+
+        table.dataset.rqhGraphAdded = '1';
+        injectRQHGraphStyles();
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'rqh-graph-toggle-btn';
+        btn.textContent = '🔀 Show as workflow diagram';
+
+        const panel = document.createElement('div');
+        panel.className = 'rqh-graph-panel';
+
+        let built = false;
+        btn.addEventListener('click', () => {
+            const showing = panel.style.display === 'block';
+            if (!showing && !built) {
+                chains.forEach((chain) => {
+                    const title = document.createElement('div');
+                    title.className = 'rqh-graph-chain-title';
+                    title.textContent = `${chain.chain} (${chain.partition}) — ${chain.steps.length} step(s)`;
+                    panel.appendChild(title);
+                    panel.appendChild(buildChainSvg(chain));
+                });
+                built = true;
+            }
+            panel.style.display = showing ? 'none' : 'block';
+            btn.textContent = showing ? '🔀 Show as workflow diagram' : '🔼 Hide workflow diagram';
+        });
+
+        const anchor = table.closest('.rqh-report-wrap') || table;
+        anchor.parentNode.insertBefore(btn, anchor);
+        anchor.parentNode.insertBefore(panel, anchor);
+    }
+
+    function scanAndAddGraphViews() {
+        document.querySelectorAll('table.report-outside').forEach(addWorkflowGraphView);
+    }
+
+    // Collects an <h3>...</h3><textarea>...</textarea>[<hr>] block: the text
+    // inside the textarea, plus every node from the h3 through the trailing
+    // <hr> (inclusive) so the whole thing can be removed afterward.
+    function collectMetaBlock(h3) {
+        const nodes = [h3];
+        let text = '';
+        let node = h3.nextSibling;
+        while (node) {
+            const next = node.nextSibling;
+            if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'TEXTAREA') {
+                text = (node.value || node.textContent || '').trim();
+                nodes.push(node);
+            } else if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'HR') {
+                nodes.push(node);
+                return { text, nodes };
+            } else if (node.nodeType === Node.TEXT_NODE) {
+                nodes.push(node);
+            } else {
+                break;
+            }
+            node = next;
+        }
         return { text, nodes };
-      } else if (node.nodeType === Node.TEXT_NODE) {
-        nodes.push(node);
-      } else {
-        break;
-      }
-      node = next;
     }
-    return { text, nodes };
-  }
 
-  function compactQueryMeta() {
-    const h3s = Array.from(document.querySelectorAll('h3'));
-    const runtimeH3 = h3s.find((h) => h.textContent.trim() === 'Query Runtime');
-    const rowCountH3 = h3s.find((h) => h.textContent.trim() === 'Query Row Count');
-    if (!runtimeH3 || !rowCountH3) return;
+    function compactQueryMeta() {
+        const h3s = Array.from(document.querySelectorAll('h3'));
+        const runtimeH3 = h3s.find((h) => h.textContent.trim() === 'Query Runtime');
+        const rowCountH3 = h3s.find((h) => h.textContent.trim() === 'Query Row Count');
+        if (!runtimeH3 || !rowCountH3) return;
 
-    injectRQHMetaStyles();
+        injectRQHMetaStyles();
 
-    const runtimeBlock = collectMetaBlock(runtimeH3);
-    const rowCountBlock = collectMetaBlock(rowCountH3);
+        const runtimeBlock = collectMetaBlock(runtimeH3);
+        const rowCountBlock = collectMetaBlock(rowCountH3);
 
-    const msMatch = runtimeBlock.text.match(/(\d+)\s*milliseconds?/i);
-    const runtimeShort = msMatch ? `${msMatch[1]} ms` : runtimeBlock.text;
+        const msMatch = runtimeBlock.text.match(/(\d+)\s*milliseconds?/i);
+        const runtimeShort = msMatch ? `${msMatch[1]} ms` : runtimeBlock.text;
 
-    const rowMatch = rowCountBlock.text.match(/(\d+)\s*rows?/i);
-    const rowCountShort = rowMatch ? `${rowMatch[1]} rows` : rowCountBlock.text;
+        const rowMatch = rowCountBlock.text.match(/(\d+)\s*rows?/i);
+        const rowCountShort = rowMatch ? `${rowMatch[1]} rows` : rowCountBlock.text;
 
-    const summary = document.createElement('div');
-    summary.className = 'rqh-query-meta';
-    summary.textContent = `${runtimeShort} · ${rowCountShort}`;
+        const summary = document.createElement('div');
+        summary.className = 'rqh-query-meta';
+        summary.textContent = `${runtimeShort} · ${rowCountShort}`;
 
-    runtimeH3.parentNode.insertBefore(summary, runtimeH3);
+        runtimeH3.parentNode.insertBefore(summary, runtimeH3);
 
-    [...runtimeBlock.nodes, ...rowCountBlock.nodes].forEach((n) => {
-      n.parentNode && n.parentNode.removeChild(n);
-    });
-  }
+        [...runtimeBlock.nodes, ...rowCountBlock.nodes].forEach((n) => {
+            n.parentNode && n.parentNode.removeChild(n);
+        });
+    }
 
-  const TAB_CONFIGS = [
-    {
-      id: 'free',
-      label: 'Free Query',
-      description: 'Write / paste any SQL directly, exactly like the default page.',
-      inputLabel: null, // no extra input box - just uses the main textarea
-      buildQuery: null, // null means "don't touch the textarea, just submit as-is"
-    },
-    {
-      id: 'search-for-use',
-      label: 'Search For Use',
-      description:
-        'Paste a list of JobDefinition names (one per line, or comma separated). ' +
-        'Returns the parent JobChain(s) that reference each one as a step.',
-      inputLabel: 'JobDefinition names',
-      buildQuery: function (list) {
-        if (list.length === 0) return null;
+    // Helper: build "(col LIKE '%term1%' OR col LIKE '%term2%' OR ...)" across
+    // all pasted search terms. Same naive quote-escaping as sqlInList - fine
+    // for typical search words, but review before use with arbitrary free text.
+    function sqlLikeAny(column, terms) {
+        return '(' + terms.map((t) => `${column} LIKE '%${t.replace(/'/g, "''")}%'`).join(' OR ') + ')';
+    }
 
-        const inList = sqlInList(list);
-        return `SELECT jd.Name AS JobDefinitionName,
+    const TAB_CONFIGS = [
+        {
+            id: 'free',
+            label: 'Free Query',
+            description: 'Write / paste any SQL directly, exactly like the default page.',
+            inputLabel: null, // no extra input box - just uses the main textarea
+            buildQuery: null, // null means "don't touch the textarea, just submit as-is"
+        },
+        {
+            id: 'search-for-use',
+            label: 'Search For Use',
+            description:
+            'Paste a list of JobDefinition names (one per line, or comma separated). ' +
+            'Returns the parent JobChain(s) that reference each one as a step.',
+            inputLabel: 'JobDefinition names',
+            buildQuery: function (list) {
+                if (list.length === 0) return null;
+
+                const inList = sqlInList(list);
+                return `SELECT jd.Name AS JobDefinitionName,
        jd1.Name AS ParentName
 FROM JobDefinition jd
 JOIN JobChainCall jcc
@@ -1044,48 +1178,48 @@ JOIN JobChain jc
 JOIN JobDefinition jd1
      ON jc.JobDefinition = jd1.UniqueId
 WHERE jd.Name IN (${inList})`;
-      },
-    },
-    {
-      id: 'list-steps',
-      label: 'List Steps',
-      description:
-        'Paste a list of JobChain names (one per line, or comma separated). ' +
-        'Returns every step (JobDefinition) contained in each chain.',
-      inputLabel: 'JobChain names',
-      buildQuery: function (list) {
-        if (list.length === 0) return null;
+            },
+        },
+        {
+            id: 'list-steps',
+            label: 'List Steps',
+            description:
+            'Paste a list of JobChain names (one per line, or comma separated). ' +
+            'Returns every step (JobDefinition) contained in each chain.',
+            inputLabel: 'JobChain names',
+            buildQuery: function (list) {
+                if (list.length === 0) return null;
 
-        const inList = sqlInList(list);
-        return `SELECT jcd.Partition AS PartitionName, jcd.Name, jcs.SequenceNumber, jd.Name
+                const inList = sqlInList(list);
+                return `SELECT jcd.Partition AS PartitionName, jcd.Name, jcs.SequenceNumber, jd.Name
 FROM JobChain jc
 JOIN JobDefinition jcd ON jcd.UniqueId = jc.JobDefinition
 JOIN JobChainStep jcs ON jcs.JobChain= jc.UniqueId
 JOIN JobChainCall jcc ON jcc.JobChainStep = jcs.UniqueId
 JOIN JobDefinition jd ON jcc.JobDefinition = jd.UniqueId
 WHERE jcd.Name IN (${inList}) AND jcd.BranchedLLPVersion = -1`;
-      },
-    },
-{
-  id: 'rmj-uc4-lookup',
-  label: 'RMJ ⇄ UC4 Name',
-  description:
-    'Paste a list of names (one per line, or comma separated), then pick a direction. ' +
-    '"RMJ → UC4" looks up each RMJ JobDefinition\'s UC4ExternalBusinessKey tag value. ' +
-    '"UC4 → RMJ" finds RMJ JobDefinition(s) whose tag ends with ", <UC4Name>" ' +
-    '(mirrors Jobdefinition_Minh_Test_GetRMJNameByUC4Name).',
-  inputLabel: 'Names',
-  toggle: {
-    options: [
-      { value: 'rmj-to-uc4', label: 'RMJ → UC4' },
-      { value: 'uc4-to-rmj', label: 'UC4 → RMJ' },
-    ],
-    default: 'rmj-to-uc4',
-  },
-  buildQuery: function (list, rawInput, direction) {
-    if (list.length === 0) return null;
+            },
+        },
+        {
+            id: 'rmj-uc4-lookup',
+            label: 'RMJ ⇄ UC4 Name',
+            description:
+            'Paste a list of names (one per line, or comma separated), then pick a direction. ' +
+            '"RMJ → UC4" looks up each RMJ JobDefinition\'s UC4ExternalBusinessKey tag value. ' +
+            '"UC4 → RMJ" finds RMJ JobDefinition(s) whose tag ends with ", <UC4Name>" ' +
+            '(mirrors Jobdefinition_Minh_Test_GetRMJNameByUC4Name).',
+            inputLabel: 'Names',
+            toggle: {
+                options: [
+                    { value: 'rmj-to-uc4', label: 'RMJ → UC4' },
+                    { value: 'uc4-to-rmj', label: 'UC4 → RMJ' },
+                ],
+                default: 'rmj-to-uc4',
+            },
+            buildQuery: function (list, rawInput, direction) {
+                if (list.length === 0) return null;
 
-    const baseSelect = `SELECT jd.Name       AS RMJName,
+                const baseSelect = `SELECT jd.Name       AS RMJName,
        jd.Partition  AS PartitionName,
        ot.Value      AS FullTagValue
 FROM JobDefinition jd
@@ -1099,34 +1233,34 @@ WHERE otd.Name = 'UC4ExternalBusinessKey'
   AND od.ObjectName = 'JobDefinition'
   AND jd.UniqueId = jd.MasterJobDefinition`;
 
-    if (direction === 'uc4-to-rmj') {
-      // Build "(ot.Value LIKE '%, name1' OR ot.Value LIKE '%, name2' OR ...)"
-      // Mirrors the Java job's likePattern = "%, " + uc4Name check.
-      const likeClauses = list
-        .map((v) => `ot.Value LIKE '%, ${v.replace(/'/g, "''")}'`)
-        .join('\n     OR ');
-      return `${baseSelect}\n  AND (${likeClauses})`;
-    }
+                if (direction === 'uc4-to-rmj') {
+                    // Build "(ot.Value LIKE '%, name1' OR ot.Value LIKE '%, name2' OR ...)"
+                    // Mirrors the Java job's likePattern = "%, " + uc4Name check.
+                    const likeClauses = list
+                    .map((v) => `ot.Value LIKE '%, ${v.replace(/'/g, "''")}'`)
+                    .join('\n     OR ');
+                    return `${baseSelect}\n  AND (${likeClauses})`;
+                }
 
-    // default: rmj-to-uc4
-    const inList = sqlInList(list);
-    return `${baseSelect}\n  AND jd.Name IN (${inList})`;
-  },
-},
-{
-  id: 'find-siblings',
-  label: 'Find Siblings (Same Tag)',
-  description:
-    'Paste a list of RMJ JobDefinition names (one per line, or comma separated). ' +
-    'Returns every OTHER JobDefinition sharing the exact same UC4ExternalBusinessKey ' +
-    'tag value — mirrors findSiblingsByUc4Name() / the "split" pGetMultiple mode in ' +
-    'Jobdefinition_Minh_Test_GetUC4NameByRmjName.',
-  inputLabel: 'RMJ JobDefinition names',
-  buildQuery: function (list) {
-    if (list.length === 0) return null;
+                // default: rmj-to-uc4
+                const inList = sqlInList(list);
+                return `${baseSelect}\n  AND jd.Name IN (${inList})`;
+            },
+        },
+        {
+            id: 'find-siblings',
+            label: 'Find Siblings (Same Tag)',
+            description:
+            'Paste a list of RMJ JobDefinition names (one per line, or comma separated). ' +
+            'Returns every OTHER JobDefinition sharing the exact same UC4ExternalBusinessKey ' +
+            'tag value — mirrors findSiblingsByUc4Name() / the "split" pGetMultiple mode in ' +
+            'Jobdefinition_Minh_Test_GetUC4NameByRmjName.',
+            inputLabel: 'RMJ JobDefinition names',
+            buildQuery: function (list) {
+                if (list.length === 0) return null;
 
-    const inList = sqlInList(list);
-    return `SELECT src.Name       AS SourceRMJName,
+                const inList = sqlInList(list);
+                return `SELECT src.Name       AS SourceRMJName,
        sib.Name       AS SiblingRMJName,
        sib.Partition  AS SiblingPartition,
        ot2.Value      AS SiblingFullTagValue
@@ -1150,239 +1284,355 @@ WHERE otd1.Name = 'UC4ExternalBusinessKey'
   AND sib.UniqueId <> src.UniqueId
   AND src.Name IN (${inList})
 `;
-  },
-},
+            },
+        },
+        {
+            id: 'search-content',
+            label: 'Search Content',
+            description:
+            'Paste one or more search terms (one per line, or comma separated). ' +
+            'Finds every JobDefinition whose parameter default value and/or script ' +
+            'source code contains any of the terms. Results from both sources share ' +
+            'one table (MatchSource column tells you which).',
+            inputLabel: 'Search term(s)',
+            checkboxes: {
+                options: [
+                    { value: 'parameter', label: 'Parameters', default: true },
+                    { value: 'script', label: 'Scripts', default: true },
+                ],
+            },
+            buildQuery: function (list, rawInput, direction, checked) {
+                if (list.length === 0) return null;
 
-  ];
+                const wantParam = !!checked && checked.includes('parameter');
+                const wantScript = !!checked && checked.includes('script');
+                if (!wantParam && !wantScript) return null;
 
-  /* -----------------------------------------------------------------------
+                const parts = [];
+
+                if (wantParam) {
+                    parts.push(`SELECT 'Parameter'         AS MatchSource,
+       jd.Partition         AS PartitionName,
+       jd.Name               AS JobDefinitionName,
+       jp.Name               AS DetailName,
+       jp.DefaultExpression  AS MatchText,
+       1                      AS MatchOccurrence
+FROM JobDefinitionParameter jp
+JOIN JobDefinition jd
+     ON jd.UniqueId = jp.JobDefinition
+WHERE jd.BranchedLLPVersion = -1
+  AND jp.DefaultExpression <> ' '
+  AND ${sqlLikeAny('jp.DefaultExpression', list)}`);
+                }
+
+                if (wantScript) {
+                    parts.push(`SELECT 'Script'            AS MatchSource,
+       jd.Partition         AS PartitionName,
+       jd.Name               AS JobDefinitionName,
+       jdt.Name               AS DetailName,
+       sl.LineText           AS MatchText,
+       COUNT(*)               AS MatchOccurrence
+FROM JobDefinition jd, JobDefinitionType jdt, Script s, ScriptSourceLine sl, ScriptSourceLine sl2
+WHERE jd.JobDefinitionType = jdt.UniqueId
+  AND jd.UniqueId = s.JobDefinition
+  AND jdt.Name IN ( 'JDBC', 'BASH', 'CMD', 'RedwoodScript', 'CSH', 'KSH', 'SQLPLUS', 'PERL' )
+  AND jd.BranchedLLPVersion = -1
+  AND s.UniqueId = sl.Script
+  AND jd.LastModificationTime > NOW('set hour 0 subtract 365 days')
+  AND ${sqlLikeAny('sl.LineText', list)}
+  AND sl2.Script = sl.Script
+  AND ${sqlLikeAny('sl2.LineText', list)}
+  AND sl2.LineNumber <= sl.LineNumber
+GROUP BY jd.UniqueId, jdt.Name, jd.Name, jd.Partition, jd.CreationTime, s.RunAsUser, s.RemoteRunAsUser, sl.LineText, sl.LineNumber`);
+                }
+
+                return parts.join('\n\nUNION ALL\n\n') + '\nORDER BY JobDefinitionName, MatchSource';
+            },
+        },
+
+    ];
+
+    /* -----------------------------------------------------------------------
    * 2. UI INJECTION
    * ---------------------------------------------------------------------*/
 
-  function init() {
-    const textarea = document.getElementById('queryEdit');
-    const form = textarea ? textarea.closest('form') : null;
-    if (!textarea || !form) {
-      // Page structure not as expected - bail out quietly.
-      return;
-    }
-
-    const wrapper = document.createElement('div');
-    wrapper.id = 'rqh-wrapper';
-    wrapper.style.marginBottom = '10px';
-    wrapper.style.fontFamily = 'verdana, sans-serif';
-    wrapper.style.fontSize = '12px';
-
-    // --- Tab bar ---
-    const tabBar = document.createElement('div');
-    tabBar.style.display = 'flex';
-    tabBar.style.gap = '4px';
-    tabBar.style.marginBottom = '6px';
-
-    // --- Panel area (description + input + run button), one per tab ---
-    const panelArea = document.createElement('div');
-    panelArea.style.border = '1px solid #cccccc';
-    panelArea.style.padding = '8px';
-    panelArea.style.background = '#f7f7f7';
-
-    const tabButtons = {};
-    const panels = {};
-
-    TAB_CONFIGS.forEach((cfg) => {
-      // Tab button
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = cfg.label;
-      btn.style.padding = '6px 12px';
-      btn.style.cursor = 'pointer';
-      btn.style.border = '1px solid #999';
-      btn.style.background = '#e0e0e0';
-      btn.dataset.tabId = cfg.id;
-      btn.addEventListener('click', () => selectTab(cfg.id));
-      tabBar.appendChild(btn);
-      tabButtons[cfg.id] = btn;
-
-      // Panel
-      const panel = document.createElement('div');
-      panel.dataset.tabId = cfg.id;
-      panel.style.display = 'none';
-
-      if (cfg.description) {
-        const desc = document.createElement('div');
-        desc.textContent = cfg.description;
-        desc.style.marginBottom = '6px';
-        desc.style.color = '#333';
-        panel.appendChild(desc);
-      }
-
-      if (cfg.inputLabel) {
-        const label = document.createElement('label');
-        label.textContent = cfg.inputLabel + ':';
-        label.style.display = 'block';
-        label.style.fontWeight = 'bold';
-        label.style.marginBottom = '4px';
-        panel.appendChild(label);
-
-        const input = document.createElement('textarea');
-        input.rows = 5;
-        input.style.width = '100%';
-        input.style.fontFamily = 'monospace';
-        input.placeholder = 'One value per line, or comma separated';
-        panel.appendChild(input);
-        panel._input = input;
-
-        // Optional direction toggle (e.g. RMJ -> UC4 / UC4 -> RMJ) rendered
-        // as a single sliding pill switch.
-        let currentDirection = cfg.toggle ? cfg.toggle.default : null;
-        if (cfg.toggle) {
-          injectRQHToggleStyles();
-
-          const toggleWrap = document.createElement('div');
-          toggleWrap.className = 'rqh-toggle';
-          toggleWrap.style.setProperty('--rqh-toggle-count', cfg.toggle.options.length);
-
-          const slider = document.createElement('div');
-          slider.className = 'rqh-toggle-slider';
-          toggleWrap.appendChild(slider);
-
-          const optionEls = {};
-          cfg.toggle.options.forEach((opt) => {
-            const optEl = document.createElement('div');
-            optEl.className = 'rqh-toggle-option';
-            optEl.textContent = opt.label;
-            optEl.dataset.value = opt.value;
-            optEl.addEventListener('click', () => setActive(opt.value));
-            toggleWrap.appendChild(optEl);
-            optionEls[opt.value] = optEl;
-          });
-
-          function setActive(value) {
-            currentDirection = value;
-            const idx = cfg.toggle.options.findIndex((o) => o.value === value);
-            slider.style.transform = `translateX(${idx * 100}%)`;
-            Object.keys(optionEls).forEach((v) => {
-              optionEls[v].classList.toggle('active', v === value);
-            });
-          }
-
-          panel.appendChild(toggleWrap);
-          panel._getDirection = () => currentDirection;
-          panel._setDirection = setActive;
-
-          setActive(currentDirection);
-        }
-        const runBtn = document.createElement('button');
-        runBtn.type = 'button';
-        runBtn.textContent = 'Generate & Run';
-        runBtn.style.marginTop = '6px';
-        runBtn.style.padding = '4px 10px';
-        runBtn.style.cursor = 'pointer';
-        runBtn.addEventListener('click', () => {
-          const list = parseList(input.value);
-          const direction = panel._getDirection ? panel._getDirection() : null;
-          const sql = cfg.buildQuery(list, input.value, direction);
-          if (!sql) {
-            alert('Please paste at least one value first.');
+    function init() {
+        const textarea = document.getElementById('queryEdit');
+        const form = textarea ? textarea.closest('form') : null;
+        if (!textarea || !form) {
+            // Page structure not as expected - bail out quietly.
             return;
-          }
-          textarea.value = sql;
-          // Remember which tab + input (+ direction) were used, since
-          // form.submit() triggers a full page reload and wipes script state.
-          try {
-            sessionStorage.setItem(
-              'rqh-active-tab',
-              JSON.stringify({ id: cfg.id, inputValue: input.value, direction })
-            );
-          } catch (e) {
-            /* sessionStorage unavailable - non-fatal, just won't restore */
-          }
-          form.submit();
-        });
-        panel.appendChild(runBtn);
-      } else {
-        const note = document.createElement('div');
-        note.style.color = '#666';
-        note.textContent = 'Edit the query box below directly, then click "Submit Query" as usual.';
-        panel.appendChild(note);
-      }
-
-      panelArea.appendChild(panel);
-      panels[cfg.id] = panel;
-    });
-
-    wrapper.appendChild(tabBar);
-    wrapper.appendChild(panelArea);
-
-    // Insert the whole thing just above the existing textarea.
-    textarea.parentNode.insertBefore(wrapper, textarea);
-
-    // Make the raw #queryEdit textarea collapsible (collapsed by default) -
-    // end users drive things through the tabs above, not the raw SQL box.
-    // On the "Free Query" tab it's the only field, so selectTab() forces
-    // it open there instead of leaving it collapsed.
-    const collapseCtl = makeQueryEditCollapsible(textarea);
-
-    function selectTab(id) {
-      Object.keys(panels).forEach((tid) => {
-        panels[tid].style.display = tid === id ? 'block' : 'none';
-        tabButtons[tid].style.background = tid === id ? '#6598CB' : '#e0e0e0';
-        tabButtons[tid].style.color = tid === id ? '#fff' : '#000';
-      });
-      if (collapseCtl) {
-        if (id === 'free') {
-          collapseCtl.forceOpen();
-        } else {
-          collapseCtl.releaseForce();
         }
-      }
+
+        const wrapper = document.createElement('div');
+        wrapper.id = 'rqh-wrapper';
+        wrapper.style.marginBottom = '10px';
+        wrapper.style.fontFamily = 'verdana, sans-serif';
+        wrapper.style.fontSize = '12px';
+
+        // --- Tab bar ---
+        const tabBar = document.createElement('div');
+        tabBar.style.display = 'flex';
+        tabBar.style.gap = '4px';
+        tabBar.style.marginBottom = '6px';
+
+        // --- Panel area (description + input + run button), one per tab ---
+        const panelArea = document.createElement('div');
+        panelArea.style.border = '1px solid #cccccc';
+        panelArea.style.padding = '8px';
+        panelArea.style.background = '#f7f7f7';
+
+        const tabButtons = {};
+        const panels = {};
+
+        TAB_CONFIGS.forEach((cfg) => {
+            // Tab button
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = cfg.label;
+            btn.style.padding = '6px 12px';
+            btn.style.cursor = 'pointer';
+            btn.style.border = '1px solid #999';
+            btn.style.background = '#e0e0e0';
+            btn.dataset.tabId = cfg.id;
+            btn.addEventListener('click', () => selectTab(cfg.id));
+            tabBar.appendChild(btn);
+            tabButtons[cfg.id] = btn;
+
+            // Panel
+            const panel = document.createElement('div');
+            panel.dataset.tabId = cfg.id;
+            panel.style.display = 'none';
+
+            if (cfg.description) {
+                const desc = document.createElement('div');
+                desc.textContent = cfg.description;
+                desc.style.marginBottom = '6px';
+                desc.style.color = '#333';
+                panel.appendChild(desc);
+            }
+
+            if (cfg.inputLabel) {
+                const label = document.createElement('label');
+                label.textContent = cfg.inputLabel + ':';
+                label.style.display = 'block';
+                label.style.fontWeight = 'bold';
+                label.style.marginBottom = '4px';
+                panel.appendChild(label);
+
+                const input = document.createElement('textarea');
+                input.rows = 5;
+                input.style.width = '100%';
+                input.style.fontFamily = 'monospace';
+                input.placeholder = 'One value per line, or comma separated';
+                panel.appendChild(input);
+                panel._input = input;
+
+                // Optional direction toggle (e.g. RMJ -> UC4 / UC4 -> RMJ) rendered
+                // as a single sliding pill switch.
+                let currentDirection = cfg.toggle ? cfg.toggle.default : null;
+                if (cfg.toggle) {
+                    injectRQHToggleStyles();
+
+                    const toggleWrap = document.createElement('div');
+                    toggleWrap.className = 'rqh-toggle';
+                    toggleWrap.style.setProperty('--rqh-toggle-count', cfg.toggle.options.length);
+
+                    const slider = document.createElement('div');
+                    slider.className = 'rqh-toggle-slider';
+                    toggleWrap.appendChild(slider);
+
+                    const optionEls = {};
+                    cfg.toggle.options.forEach((opt) => {
+                        const optEl = document.createElement('div');
+                        optEl.className = 'rqh-toggle-option';
+                        optEl.textContent = opt.label;
+                        optEl.dataset.value = opt.value;
+                        optEl.addEventListener('click', () => setActive(opt.value));
+                        toggleWrap.appendChild(optEl);
+                        optionEls[opt.value] = optEl;
+                    });
+
+                    function setActive(value) {
+                        currentDirection = value;
+                        const idx = cfg.toggle.options.findIndex((o) => o.value === value);
+                        slider.style.transform = `translateX(${idx * 100}%)`;
+                        Object.keys(optionEls).forEach((v) => {
+                            optionEls[v].classList.toggle('active', v === value);
+                        });
+                    }
+
+                    panel.appendChild(toggleWrap);
+                    panel._getDirection = () => currentDirection;
+                    panel._setDirection = setActive;
+
+                    setActive(currentDirection);
+                }
+
+                // Optional checkbox group (e.g. "search in Parameters and/or
+                // Scripts") rendered as a row of inline checkboxes. Multiple
+                // options may be active at once, unlike the toggle above.
+                let currentChecked = cfg.checkboxes
+                ? cfg.checkboxes.options.filter((o) => o.default).map((o) => o.value)
+                : null;
+                if (cfg.checkboxes) {
+                    injectRQHCheckboxStyles();
+
+                    const cbWrap = document.createElement('div');
+                    cbWrap.className = 'rqh-checkbox-group';
+
+                    const checkboxEls = {};
+                    cfg.checkboxes.options.forEach((opt) => {
+                        const optLabel = document.createElement('label');
+                        optLabel.className = 'rqh-checkbox-option';
+
+                        const cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.checked = !!opt.default;
+                        cb.addEventListener('change', () => {
+                            currentChecked = cfg.checkboxes.options
+                                .filter((o) => checkboxEls[o.value].checked)
+                                .map((o) => o.value);
+                        });
+
+                        optLabel.appendChild(cb);
+                        optLabel.appendChild(document.createTextNode(opt.label));
+                        cbWrap.appendChild(optLabel);
+                        checkboxEls[opt.value] = cb;
+                    });
+
+                    panel.appendChild(cbWrap);
+                    panel._getChecked = () => currentChecked;
+                    panel._setChecked = (values) => {
+                        currentChecked = values.slice();
+                        cfg.checkboxes.options.forEach((o) => {
+                            checkboxEls[o.value].checked = currentChecked.includes(o.value);
+                        });
+                    };
+                }
+
+                const runBtn = document.createElement('button');
+                runBtn.type = 'button';
+                runBtn.textContent = 'Generate & Run';
+                runBtn.style.marginTop = '6px';
+                runBtn.style.padding = '4px 10px';
+                runBtn.style.cursor = 'pointer';
+                runBtn.addEventListener('click', () => {
+                    const list = parseList(input.value);
+                    const direction = panel._getDirection ? panel._getDirection() : null;
+                    const checked = panel._getChecked ? panel._getChecked() : null;
+                    const sql = cfg.buildQuery(list, input.value, direction, checked);
+                    if (!sql) {
+                        if (checked && checked.length === 0) {
+                            alert('Please select at least one search target (Parameters and/or Scripts).');
+                        } else {
+                            alert('Please paste at least one value first.');
+                        }
+                        return;
+                    }
+                    textarea.value = sql;
+                    // Remember which tab + input (+ direction/checked) were used, since
+                    // form.submit() triggers a full page reload and wipes script state.
+                    try {
+                        sessionStorage.setItem(
+                            'rqh-active-tab',
+                            JSON.stringify({ id: cfg.id, inputValue: input.value, direction, checked })
+                        );
+                    } catch (e) {
+                        /* sessionStorage unavailable - non-fatal, just won't restore */
+                    }
+                    form.submit();
+                });
+                panel.appendChild(runBtn);
+            } else {
+                const note = document.createElement('div');
+                note.style.color = '#666';
+                note.textContent = 'Edit the query box below directly, then click "Submit Query" as usual.';
+                panel.appendChild(note);
+            }
+
+            panelArea.appendChild(panel);
+            panels[cfg.id] = panel;
+        });
+
+        wrapper.appendChild(tabBar);
+        wrapper.appendChild(panelArea);
+
+        // Insert the whole thing just above the existing textarea.
+        textarea.parentNode.insertBefore(wrapper, textarea);
+
+        // Make the raw #queryEdit textarea collapsible (collapsed by default) -
+        // end users drive things through the tabs above, not the raw SQL box.
+        // On the "Free Query" tab it's the only field, so selectTab() forces
+        // it open there instead of leaving it collapsed.
+        const collapseCtl = makeQueryEditCollapsible(textarea);
+
+        function selectTab(id) {
+            Object.keys(panels).forEach((tid) => {
+                panels[tid].style.display = tid === id ? 'block' : 'none';
+                tabButtons[tid].style.background = tid === id ? '#6598CB' : '#e0e0e0';
+                tabButtons[tid].style.color = tid === id ? '#fff' : '#000';
+            });
+            if (collapseCtl) {
+                if (id === 'free') {
+                    collapseCtl.forceOpen();
+                } else {
+                    collapseCtl.releaseForce();
+                }
+            }
+        }
+
+        // Restore whichever tab was active before the last form submit
+        // (submits cause a full page reload, wiping normal script state).
+        let restored = null;
+        try {
+            const saved = sessionStorage.getItem('rqh-active-tab');
+            if (saved) restored = JSON.parse(saved);
+        } catch (e) {
+            /* ignore malformed/unavailable storage */
+        }
+
+        if (restored && panels[restored.id]) {
+            selectTab(restored.id);
+            const panel = panels[restored.id];
+            if (panel._input && typeof restored.inputValue === 'string') {
+                panel._input.value = restored.inputValue;
+            }
+            if (panel._setDirection && restored.direction) {
+                panel._setDirection(restored.direction);
+            }
+            if (panel._setChecked && restored.checked) {
+                panel._setChecked(restored.checked);
+            }
+        } else {
+            // Default to the first tab.
+            selectTab(TAB_CONFIGS[0].id);
+        }
     }
 
-    // Restore whichever tab was active before the last form submit
-    // (submits cause a full page reload, wiping normal script state).
-    let restored = null;
-    try {
-      const saved = sessionStorage.getItem('rqh-active-tab');
-      if (saved) restored = JSON.parse(saved);
-    } catch (e) {
-      /* ignore malformed/unavailable storage */
+    // If we're on an un-rendered /redwood/support/query page, auto-POST an
+    // empty query to render it and stop here - the resulting page load will
+    // re-run this script with a proper #queryEdit present.
+    if (!ensureQueryPageRendered()) {
+        init();
+        scanAndEnhanceReportTables();
+        compactQueryMeta();
+        scanAndParseUc4Names();
+        scanAndAddGraphViews();
+        scanAndMakeResizable();
+        scanAndAddCsvLinks();
+        scanAndAddResultFilters();
+        new MutationObserver(() => {
+            scanAndEnhanceReportTables();
+            compactQueryMeta();
+            scanAndParseUc4Names();
+            scanAndAddGraphViews();
+            scanAndMakeResizable();
+            scanAndAddCsvLinks();
+            scanAndAddResultFilters();
+        }).observe(document.body, {
+            childList: true,
+            subtree: true,
+        });
     }
-
-    if (restored && panels[restored.id]) {
-      selectTab(restored.id);
-      const panel = panels[restored.id];
-      if (panel._input && typeof restored.inputValue === 'string') {
-        panel._input.value = restored.inputValue;
-      }
-      if (panel._setDirection && restored.direction) {
-        panel._setDirection(restored.direction);
-      }
-    } else {
-      // Default to the first tab.
-      selectTab(TAB_CONFIGS[0].id);
-    }
-  }
-
-// If we're on an un-rendered /redwood/support/query page, auto-POST an
-// empty query to render it and stop here - the resulting page load will
-// re-run this script with a proper #queryEdit present.
-if (!ensureQueryPageRendered()) {
-  init();
-  scanAndEnhanceReportTables();
-  compactQueryMeta();
-  scanAndParseUc4Names();
-  scanAndAddGraphViews();
-  scanAndMakeResizable();
-  scanAndAddCsvLinks();
-  new MutationObserver(() => {
-    scanAndEnhanceReportTables();
-    compactQueryMeta();
-    scanAndParseUc4Names();
-    scanAndAddGraphViews();
-    scanAndMakeResizable();
-    scanAndAddCsvLinks();
-  }).observe(document.body, {
-    childList: true,
-    subtree: true,
-  });
-}
 })();
