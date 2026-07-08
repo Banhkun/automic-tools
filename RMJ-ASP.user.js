@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RMJ-ASPortal Cross Tab Control
 // @namespace    bosch-tools
-// @version      3.6
+// @version      3.7
 // @include      *://runmyjobs-dev*.*/*
 // @include      *://*/ASPortal/*
 // @grant        GM_setValue
@@ -33,17 +33,19 @@
       return null;
     }
 
-    // ── Request ID suggestions (from live ASPortal tabs) ──
-
-    function ensureRequestIdDatalist() {
-      let dl = document.getElementById('asp-request-id-list');
-      if (!dl) {
-        dl = document.createElement('datalist');
-        dl.id = 'asp-request-id-list';
-        document.body.appendChild(dl);
-      }
-      return dl;
+    function setNativeValue(input, value) {
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      nativeSetter.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
     }
+
+    // ── Request ID suggestions (from live ASPortal tabs) ──
+    // Custom dropdown instead of a native <datalist>: native datalists are
+    // rendered by the browser outside normal DOM/CSS control, and their
+    // show/hide + click handling is inconsistent (easy to lose the option
+    // on mouseout before the click registers). This version is a plain
+    // absolutely-positioned div list that we fully control.
 
     function getOpenRequestIds() {
       const keys = GM_listValues().filter(k => k.startsWith('asportal_heartbeat_'));
@@ -62,13 +64,110 @@
       return out;
     }
 
-    function refreshRequestIdDatalist() {
-      const dl = ensureRequestIdDatalist();
-      const open = getOpenRequestIds();
-      dl.innerHTML = open.map(hb => {
-        const label = hb.title ? `${hb.requestId} - ${hb.title}` : hb.requestId;
-        return `<option value="${hb.requestId}">${label}</option>`;
-      }).join('');
+    function ensureRequestIdDropdown() {
+      let dd = document.getElementById('asp-request-id-dropdown');
+      if (!dd) {
+        dd = document.createElement('div');
+        dd.id = 'asp-request-id-dropdown';
+        dd.style.cssText = `
+          position: absolute;
+          z-index: 99999;
+          background: #fff;
+          border: 1px solid #aaa;
+          border-radius: 4px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+          max-height: 220px;
+          overflow-y: auto;
+          display: none;
+          font-size: 12px;
+          font-family: inherit;
+        `;
+        document.body.appendChild(dd);
+      }
+      return dd;
+    }
+
+    function positionDropdown(dd, anchorInput) {
+      const rect = anchorInput.getBoundingClientRect();
+      dd.style.left = (rect.left + window.scrollX) + 'px';
+      dd.style.top = (rect.bottom + window.scrollY + 2) + 'px';
+      dd.style.minWidth = Math.max(rect.width, 220) + 'px';
+    }
+
+    function renderRequestIdDropdown(dd, requestIdInput, filterText) {
+      const filter = (filterText || '').trim().toLowerCase();
+      const open = getOpenRequestIds().filter(hb =>
+        !filter || String(hb.requestId).toLowerCase().includes(filter)
+      );
+
+      if (open.length === 0) {
+        dd.style.display = 'none';
+        return;
+      }
+
+      dd.innerHTML = '';
+      open.forEach((hb) => {
+        const item = document.createElement('div');
+        item.textContent = hb.title ? `${hb.requestId} — ${hb.title}` : hb.requestId;
+        item.style.cssText = `
+          padding: 6px 10px;
+          cursor: pointer;
+          white-space: nowrap;
+        `;
+        item.addEventListener('mouseenter', () => { item.style.background = '#e8f0fe'; });
+        item.addEventListener('mouseleave', () => { item.style.background = ''; });
+
+        // mousedown (not click) fires before the input's blur event, so the
+        // dropdown can't close itself out from under the click.
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          setNativeValue(requestIdInput, String(hb.requestId));
+          dd.style.display = 'none';
+        });
+
+        dd.appendChild(item);
+      });
+
+      positionDropdown(dd, requestIdInput);
+      dd.style.display = 'block';
+    }
+
+    function wireRequestIdDropdown(requestIdInput) {
+      const dd = ensureRequestIdDropdown();
+
+      requestIdInput.setAttribute('autocomplete', 'off');
+
+      requestIdInput.addEventListener('focus', () => {
+        renderRequestIdDropdown(dd, requestIdInput, requestIdInput.value);
+      });
+
+      requestIdInput.addEventListener('input', () => {
+        renderRequestIdDropdown(dd, requestIdInput, requestIdInput.value);
+      });
+
+      window.addEventListener('scroll', () => {
+        if (dd.style.display === 'block') positionDropdown(dd, requestIdInput);
+      }, true);
+      window.addEventListener('resize', () => {
+        if (dd.style.display === 'block') positionDropdown(dd, requestIdInput);
+      });
+
+      // Hide on outside click — but NOT on mouseout, and not before a
+      // dropdown item's own mousedown handler (which preventDefault()s) runs.
+      document.addEventListener('mousedown', (e) => {
+        if (e.target === requestIdInput || dd.contains(e.target)) return;
+        dd.style.display = 'none';
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') dd.style.display = 'none';
+      });
+
+      // Keep list fresh while the dropdown is open
+      setInterval(() => {
+        if (dd.style.display === 'block') {
+          renderRequestIdDropdown(dd, requestIdInput, requestIdInput.value);
+        }
+      }, 2000);
     }
 
     function injectRMJUI() {
@@ -78,11 +177,7 @@
       const callsInput = findInputByLabel('Calls');
       if (!requestIdInput || !callsInput) return;
 
-      // Wire up suggestions on the Request ID field
-      requestIdInput.setAttribute('list', 'asp-request-id-list');
-      requestIdInput.setAttribute('autocomplete', 'off');
-      ensureRequestIdDatalist();
-      refreshRequestIdDatalist();
+      wireRequestIdDropdown(requestIdInput);
 
       // ── Button next to Request ID ──
       const btn = document.createElement('button');
@@ -217,10 +312,7 @@
       `;
 
       textarea.addEventListener('input', () => {
-        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-        nativeSetter.call(callsInput, textarea.value);
-        callsInput.dispatchEvent(new Event('input', { bubbles: true }));
-        callsInput.dispatchEvent(new Event('change', { bubbles: true }));
+        setNativeValue(callsInput, textarea.value);
       });
 
       callsInput.style.display = 'none';
@@ -240,10 +332,7 @@
         const formatted = JSON.stringify(result.data, null, 2);
         const ta = document.getElementById('asp-calls-textarea');
         if (ta) ta.value = formatted;
-        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-        nativeSetter.call(callsInput, formatted);
-        callsInput.dispatchEvent(new Event('input', { bubbles: true }));
-        callsInput.dispatchEvent(new Event('change', { bubbles: true }));
+        setNativeValue(callsInput, formatted);
         console.log('[RMJ] Calls field populated');
       }
       if (btn) {
@@ -270,10 +359,6 @@
     }
 
     watchForDialog();
-
-    // Keep suggestions fresh even while the dialog is already open
-    refreshRequestIdDatalist();
-    setInterval(refreshRequestIdDatalist, 2000);
   }
 
   // ── ASPortal side ──
