@@ -33,19 +33,17 @@
       return null;
     }
 
-    function setNativeValue(input, value) {
-      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      nativeSetter.call(input, value);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
     // ── Request ID suggestions (from live ASPortal tabs) ──
-    // Custom dropdown instead of a native <datalist>: native datalists are
-    // rendered by the browser outside normal DOM/CSS control, and their
-    // show/hide + click handling is inconsistent (easy to lose the option
-    // on mouseout before the click registers). This version is a plain
-    // absolutely-positioned div list that we fully control.
+
+    function ensureRequestIdDatalist() {
+      let dl = document.getElementById('asp-request-id-list');
+      if (!dl) {
+        dl = document.createElement('datalist');
+        dl.id = 'asp-request-id-list';
+        document.body.appendChild(dl);
+      }
+      return dl;
+    }
 
     function getOpenRequestIds() {
       const keys = GM_listValues().filter(k => k.startsWith('asportal_heartbeat_'));
@@ -64,110 +62,27 @@
       return out;
     }
 
-    function ensureRequestIdDropdown() {
-      let dd = document.getElementById('asp-request-id-dropdown');
-      if (!dd) {
-        dd = document.createElement('div');
-        dd.id = 'asp-request-id-dropdown';
-        dd.style.cssText = `
-          position: absolute;
-          z-index: 99999;
-          background: #fff;
-          border: 1px solid #aaa;
-          border-radius: 4px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-          max-height: 220px;
-          overflow-y: auto;
-          display: none;
-          font-size: 12px;
-          font-family: inherit;
-        `;
-        document.body.appendChild(dd);
-      }
-      return dd;
-    }
+    // Tracks the last-rendered set of options so we only touch the
+    // <datalist>'s DOM when the suggestions actually change. Rewriting
+    // innerHTML on every poll tick closes the native datalist popup
+    // mid-selection in most browsers, which made the dropdown feel like
+    // it "disappeared" before the user could click an option.
+    let lastDatalistSignature = '';
 
-    function positionDropdown(dd, anchorInput) {
-      const rect = anchorInput.getBoundingClientRect();
-      dd.style.left = (rect.left + window.scrollX) + 'px';
-      dd.style.top = (rect.bottom + window.scrollY + 2) + 'px';
-      dd.style.minWidth = Math.max(rect.width, 220) + 'px';
-    }
+    function refreshRequestIdDatalist() {
+      const dl = ensureRequestIdDatalist();
+      const open = getOpenRequestIds();
 
-    function renderRequestIdDropdown(dd, requestIdInput, filterText) {
-      const filter = (filterText || '').trim().toLowerCase();
-      const open = getOpenRequestIds().filter(hb =>
-        !filter || String(hb.requestId).toLowerCase().includes(filter)
-      );
-
-      if (open.length === 0) {
-        dd.style.display = 'none';
-        return;
-      }
-
-      dd.innerHTML = '';
-      open.forEach((hb) => {
-        const item = document.createElement('div');
-        item.textContent = hb.title ? `${hb.requestId} — ${hb.title}` : hb.requestId;
-        item.style.cssText = `
-          padding: 6px 10px;
-          cursor: pointer;
-          white-space: nowrap;
-        `;
-        item.addEventListener('mouseenter', () => { item.style.background = '#e8f0fe'; });
-        item.addEventListener('mouseleave', () => { item.style.background = ''; });
-
-        // mousedown (not click) fires before the input's blur event, so the
-        // dropdown can't close itself out from under the click.
-        item.addEventListener('mousedown', (e) => {
-          e.preventDefault();
-          setNativeValue(requestIdInput, String(hb.requestId));
-          dd.style.display = 'none';
-        });
-
-        dd.appendChild(item);
+      const options = open.map(hb => {
+        const label = hb.title ? `${hb.requestId} - ${hb.title}` : hb.requestId;
+        return { requestId: hb.requestId, label };
       });
 
-      positionDropdown(dd, requestIdInput);
-      dd.style.display = 'block';
-    }
+      const signature = options.map(o => `${o.requestId}|${o.label}`).sort().join('\n');
+      if (signature === lastDatalistSignature) return;
+      lastDatalistSignature = signature;
 
-    function wireRequestIdDropdown(requestIdInput) {
-      const dd = ensureRequestIdDropdown();
-
-      requestIdInput.setAttribute('autocomplete', 'off');
-
-      requestIdInput.addEventListener('focus', () => {
-        renderRequestIdDropdown(dd, requestIdInput, requestIdInput.value);
-      });
-
-      requestIdInput.addEventListener('input', () => {
-        renderRequestIdDropdown(dd, requestIdInput, requestIdInput.value);
-      });
-
-      window.addEventListener('scroll', () => {
-        if (dd.style.display === 'block') positionDropdown(dd, requestIdInput);
-      }, true);
-      window.addEventListener('resize', () => {
-        if (dd.style.display === 'block') positionDropdown(dd, requestIdInput);
-      });
-
-      // Hide on outside click — but NOT on mouseout, and not before a
-      // dropdown item's own mousedown handler (which preventDefault()s) runs.
-      document.addEventListener('mousedown', (e) => {
-        if (e.target === requestIdInput || dd.contains(e.target)) return;
-        dd.style.display = 'none';
-      });
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') dd.style.display = 'none';
-      });
-
-      // Keep list fresh while the dropdown is open
-      setInterval(() => {
-        if (dd.style.display === 'block') {
-          renderRequestIdDropdown(dd, requestIdInput, requestIdInput.value);
-        }
-      }, 2000);
+      dl.innerHTML = options.map(o => `<option value="${o.requestId}">${o.label}</option>`).join('');
     }
 
     function injectRMJUI() {
@@ -177,7 +92,11 @@
       const callsInput = findInputByLabel('Calls');
       if (!requestIdInput || !callsInput) return;
 
-      wireRequestIdDropdown(requestIdInput);
+      // Wire up suggestions on the Request ID field
+      requestIdInput.setAttribute('list', 'asp-request-id-list');
+      requestIdInput.setAttribute('autocomplete', 'off');
+      ensureRequestIdDatalist();
+      refreshRequestIdDatalist();
 
       // ── Button next to Request ID ──
       const btn = document.createElement('button');
@@ -312,7 +231,10 @@
       `;
 
       textarea.addEventListener('input', () => {
-        setNativeValue(callsInput, textarea.value);
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(callsInput, textarea.value);
+        callsInput.dispatchEvent(new Event('input', { bubbles: true }));
+        callsInput.dispatchEvent(new Event('change', { bubbles: true }));
       });
 
       callsInput.style.display = 'none';
@@ -332,7 +254,10 @@
         const formatted = JSON.stringify(result.data, null, 2);
         const ta = document.getElementById('asp-calls-textarea');
         if (ta) ta.value = formatted;
-        setNativeValue(callsInput, formatted);
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(callsInput, formatted);
+        callsInput.dispatchEvent(new Event('input', { bubbles: true }));
+        callsInput.dispatchEvent(new Event('change', { bubbles: true }));
         console.log('[RMJ] Calls field populated');
       }
       if (btn) {
@@ -359,6 +284,12 @@
     }
 
     watchForDialog();
+
+    // Keep suggestions fresh even while the dialog is already open.
+    // refreshRequestIdDatalist() no-ops unless the option set changed,
+    // so this interval no longer fights the browser's native datalist popup.
+    refreshRequestIdDatalist();
+    setInterval(refreshRequestIdDatalist, 2000);
   }
 
   // ── ASPortal side ──
@@ -443,55 +374,39 @@
       }
     }
 
-    // ── Job Description scraping (per-call, indexed by the "_N-" prefix
-    // found in the input id, e.g. "...-336_1-Input_CRTS_JOB_DESCR" → call 1) ──
+    // ── Job Description scraping (per call, matched by DOM order) ──
+    //
+    // Each call's Job Description input id looks like
+    // "...-559_8-Input_CRTS_JOB_DESCR", "...-559_9-...", "...-559_10-..."
+    // The "_N-" segment (8, 9, 10...) is an OutSystems internal list-item
+    // instance number, NOT the call's business Counter (which starts at 1
+    // in the Overview table). Keying off that number caused every lookup
+    // to miss whenever the instance numbers didn't start at 1 — i.e. on
+    // essentially every multi-call request — leaving jobDescription null
+    // for every call.
+    //
+    // Fix: querySelectorAll returns these inputs in DOM order, and DOM
+    // order for the Call tabs matches Call 1, Call 2, Call 3... which is
+    // also the order the Overview table rows come back in. So we just
+    // zip them together positionally instead of trying to parse an index
+    // out of the id.
 
     function parseJobDescriptions() {
       const inputs = document.querySelectorAll('input[id$="-Input_CRTS_JOB_DESCR"]');
-      const map = {};
-      let unindexedCount = 0;
-
-      inputs.forEach((input) => {
-        const m = input.id.match(/_(\d+)-Input_CRTS_JOB_DESCR$/);
-        const value = input.value?.trim() || null;
-        if (m) {
-          map[parseInt(m[1], 10)] = value;
-        } else {
-          map[`__unindexed_${unindexedCount++}`] = value;
-          console.warn('[ASPortal] Job Description field id did not match expected pattern:', input.id);
-        }
-      });
-
-      return map;
+      return Array.from(inputs).map((input) => input.value?.trim() || null);
     }
 
     // Merges scraped Job Description values into the Overview-parsed calls
-    // array, matching on call index. Falls back to DOM order if no ids
-    // parsed as numeric, and warns loudly on any count mismatch so it's
-    // obvious in the console if not all calls were mounted in the DOM.
-    function mergeJobDescriptions(calls, jobDescMap) {
-      const numericKeys = Object.keys(jobDescMap)
-        .filter(k => !k.startsWith('__unindexed_'))
-        .map(Number);
-
-      if (numericKeys.length > 0) {
-        calls.forEach((call) => {
-          if (call.call != null && jobDescMap[call.call] !== undefined) {
-            call.jobDescription = jobDescMap[call.call];
-          } else {
-            call.jobDescription = null;
-            console.warn('[ASPortal] No Job Description found for call', call.call, '— may need to expand that call before scraping');
-          }
-        });
-        if (numericKeys.length !== calls.length) {
-          console.warn(`[ASPortal] Found ${numericKeys.length} Job Description field(s) but ${calls.length} call(s) in Overview — likely only some calls are mounted/expanded in the DOM`);
-        }
-      } else {
-        const values = Object.values(jobDescMap);
-        console.warn('[ASPortal] Could not parse call index from any Job Description id — falling back to DOM order, verify this manually');
-        calls.forEach((call, i) => { call.jobDescription = values[i] ?? null; });
+    // array by position (see parseJobDescriptions comment above for why).
+    // Warns loudly on any count mismatch so it's obvious in the console if
+    // not all calls were mounted in the DOM.
+    function mergeJobDescriptions(calls, jobDescList) {
+      if (jobDescList.length !== calls.length) {
+        console.warn(`[ASPortal] Found ${jobDescList.length} Job Description field(s) but ${calls.length} call(s) in Overview — likely only some calls are mounted/expanded in the DOM`);
       }
-
+      calls.forEach((call, i) => {
+        call.jobDescription = jobDescList[i] ?? null;
+      });
       return calls;
     }
 
@@ -662,11 +577,11 @@
           waitFor(
             () => !!document.querySelector('input[id$="-Input_CRTS_JOB_DESCR"]') && !!findOverviewButton(),
             () => {
-              const jobDescMap = parseJobDescriptions();
-              console.log('[ASPortal] Job Descriptions parsed:', jobDescMap);
+              const jobDescList = parseJobDescriptions();
+              console.log('[ASPortal] Job Descriptions parsed:', jobDescList);
 
               openOverviewAndParse((calls) => {
-                const mergedCalls = mergeJobDescriptions(calls, jobDescMap);
+                const mergedCalls = mergeJobDescriptions(calls, jobDescList);
 
                 console.log('[ASPortal] Ensuring Scheduling tab...');
                 ensureTabActive('Scheduling');
